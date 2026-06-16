@@ -7,9 +7,9 @@ struct WorkLogView: View {
     @State private var productivity = 3
     @State private var showHistory = false
     @State private var selectedDate = Date()
-    
+
     let moods = ["😊", "😐", "😔", "😤", "😴", "🎉", "💪", "🤔"]
-    
+
     var body: some View {
         AppPage(
             title: "每日复盘",
@@ -26,15 +26,15 @@ struct WorkLogView: View {
                             HStack {
                                 DatePicker("日期", selection: $selectedDate, displayedComponents: .date)
                                     .datePickerStyle(.compact)
-                                
+
                                 Spacer()
-                                
+
                                 Text(selectedDate, style: .date)
                                     .font(.headline)
                                     .foregroundColor(.secondary)
                             }
                         }
-                        
+
                         SectionPanel(title: "状态标记", subtitle: "记录状态，不评判自己。") {
                             VStack(alignment: .leading, spacing: 14) {
                                 HStack(spacing: 8) {
@@ -49,7 +49,7 @@ struct WorkLogView: View {
                                         .buttonStyle(.plain)
                                     }
                                 }
-                                
+
                                 HStack(spacing: 8) {
                                     ForEach(1...5, id: \.self) { rating in
                                         Button(action: { productivity = rating }) {
@@ -59,7 +59,7 @@ struct WorkLogView: View {
                                         }
                                         .buttonStyle(.plain)
                                     }
-                                    
+
                                     Text(productivityLabel)
                                         .font(.caption)
                                         .foregroundColor(.secondary)
@@ -68,7 +68,7 @@ struct WorkLogView: View {
                             }
                         }
                     }
-                    
+
                     SectionPanel(title: "今日沉淀", subtitle: "建议写下：完成了什么、卡在哪里、明天先做哪一步。") {
                         PromptTextEditor(
                             text: $logContent,
@@ -76,14 +76,14 @@ struct WorkLogView: View {
                             minHeight: 220
                         )
                     }
-                    
+
                     HStack {
                         Text("复盘不需要完美，真实比漂亮更有用。")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
+
                         Spacer()
-                        
+
                         Button(action: saveLog) {
                             Label("保存复盘", systemImage: "square.and.arrow.down")
                                 .font(.headline)
@@ -107,7 +107,7 @@ struct WorkLogView: View {
             loadSelectedDateLog()
         }
     }
-    
+
     private var productivityLabel: String {
         switch productivity {
         case 1: return "低电量，先恢复"
@@ -117,7 +117,7 @@ struct WorkLogView: View {
         default: return "高质量投入"
         }
     }
-    
+
     private func saveLog() {
         let trimmedContent = logContent.trimmingCharacters(in: .whitespacesAndNewlines)
         let log = WorkLog(
@@ -127,11 +127,11 @@ struct WorkLogView: View {
             productivity: productivity
         )
         dataStore.addWorkLog(log)
-        
+
         // 显示提示
         NSSound.beep()
     }
-    
+
     private func loadSelectedDateLog() {
         if let log = dataStore.workLog(for: selectedDate) {
             logContent = log.content
@@ -147,24 +147,24 @@ struct WorkLogView: View {
 
 struct WorkLogHistoryView: View {
     @EnvironmentObject var dataStore: DataStore
-    
+
     var body: some View {
         VStack {
             Text("复盘历史")
                 .font(.headline)
                 .padding()
-            
+
             List(dataStore.workLogs.sorted(by: { $0.date > $1.date })) { log in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text(log.date, style: .date)
                             .font(.headline)
-                        
+
                         Spacer()
-                        
+
                         Text(log.mood)
                             .font(.title)
-                        
+
                         HStack {
                             ForEach(1...5, id: \.self) { rating in
                                 Image(systemName: rating <= log.productivity ? "star.fill" : "star")
@@ -173,13 +173,14 @@ struct WorkLogHistoryView: View {
                             }
                         }
                     }
-                    
+
                     Text(log.content)
                         .font(.body)
                         .lineLimit(5)
                 }
                 .padding(.vertical, 8)
             }
+            .appListContainer(minHeight: 520)
             .overlay {
                 if dataStore.workLogs.isEmpty {
                     EmptyStateView(

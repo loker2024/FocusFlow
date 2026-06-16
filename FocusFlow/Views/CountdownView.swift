@@ -8,27 +8,27 @@ struct CountdownView: View {
     @State private var newEventIcon = "📅"
     @State private var newEventColor = "blue"
     @State private var newEventIsRepeat = false
-    
+
     let icons = ["📅", "🎂", "🎄", "🎉", "✈️", "💼", "🎓", "💍", "🏠", "🌟"]
     let colors = ["blue", "red", "green", "purple", "orange", "pink"]
-    
+
     var sortedEvents: [CountdownEvent] {
         dataStore.countdownEvents.sorted { lhs, rhs in
             let lhsDays = lhs.daysRemaining
             let rhsDays = rhs.daysRemaining
-            
+
             if (lhsDays < 0) != (rhsDays < 0) {
                 return lhsDays >= 0
             }
-            
+
             if lhsDays < 0 {
                 return lhsDays > rhsDays
             }
-            
+
             return lhsDays < rhsDays
         }
     }
-    
+
     var body: some View {
         AppPage(
             title: "关键日期",
@@ -39,7 +39,7 @@ struct CountdownView: View {
             action: { showAddEvent = true }
         ) {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
+                MetricStrip {
                     MetricCard(
                         title: "7 天内",
                         value: "\(upcomingSoonCount) 个",
@@ -47,7 +47,7 @@ struct CountdownView: View {
                         icon: "clock.fill",
                         color: .orange
                     )
-                    
+
                     MetricCard(
                         title: "已错过",
                         value: "\(expiredCount) 个",
@@ -55,7 +55,7 @@ struct CountdownView: View {
                         icon: "exclamationmark.circle.fill",
                         color: .red
                     )
-                    
+
                     MetricCard(
                         title: "全部节点",
                         value: "\(dataStore.countdownEvents.count) 个",
@@ -64,7 +64,7 @@ struct CountdownView: View {
                         color: .blue
                     )
                 }
-                
+
                 List {
                     ForEach(sortedEvents) { event in
                         CountdownEventRow(event: event)
@@ -75,12 +75,7 @@ struct CountdownView: View {
                         }
                     }
                 }
-                .listStyle(.inset)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.appStroke)
-                )
+                .appListContainer(minHeight: 380)
                 .overlay {
                     if dataStore.countdownEvents.isEmpty {
                         EmptyStateView(
@@ -90,7 +85,6 @@ struct CountdownView: View {
                         )
                     }
                 }
-                .frame(minHeight: 380)
             }
         }
         .sheet(isPresented: $showAddEvent) {
@@ -105,7 +99,7 @@ struct CountdownView: View {
                 onSave: {
                     let trimmedTitle = newEventTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedTitle.isEmpty else { return }
-                    
+
                     let event = CountdownEvent(
                         title: trimmedTitle,
                         date: newEventDate,
@@ -124,7 +118,7 @@ struct CountdownView: View {
             )
         }
     }
-    
+
     private func resetNewEvent() {
         newEventTitle = ""
         newEventDate = Date().addingTimeInterval(7 * 24 * 3600)
@@ -132,11 +126,11 @@ struct CountdownView: View {
         newEventColor = "blue"
         newEventIsRepeat = false
     }
-    
+
     private var upcomingSoonCount: Int {
         dataStore.countdownEvents.filter { $0.daysRemaining >= 0 && $0.daysRemaining <= 7 }.count
     }
-    
+
     private var expiredCount: Int {
         dataStore.countdownEvents.filter { $0.daysRemaining < 0 }.count
     }
@@ -144,11 +138,11 @@ struct CountdownView: View {
 
 struct CountdownEventRow: View {
     let event: CountdownEvent
-    
+
     var eventColor: Color {
-        colorFromString(event.color)
+        Color.appNamed(event.color)
     }
-    
+
     var daysText: String {
         let days = event.daysRemaining
         if days == 0 {
@@ -161,7 +155,7 @@ struct CountdownEventRow: View {
             return "\(-days)天前"
         }
     }
-    
+
     var statusColor: Color {
         let days = event.daysRemaining
         if days < 0 {
@@ -174,7 +168,7 @@ struct CountdownEventRow: View {
             return .green
         }
     }
-    
+
     var body: some View {
         HStack(spacing: 14) {
             Text(event.icon)
@@ -182,28 +176,28 @@ struct CountdownEventRow: View {
                 .frame(width: 58, height: 58)
                 .background(eventColor.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(event.title)
                     .font(.headline)
-                
+
                 Text(event.nextOccurrenceDate, style: .date)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                
+
                 if event.isRepeatYearly {
                     PillBadge(text: "每年重复", color: .blue)
                 }
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 4) {
                 Text(daysText)
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(statusColor)
-                
+
                 if event.daysRemaining > 0 {
                     Text("提前安排")
                         .font(.caption)
@@ -212,18 +206,6 @@ struct CountdownEventRow: View {
             }
         }
         .padding(.vertical, 8)
-    }
-    
-    private func colorFromString(_ colorString: String) -> Color {
-        switch colorString {
-        case "red": return .red
-        case "green": return .green
-        case "blue": return .blue
-        case "purple": return .purple
-        case "orange": return .orange
-        case "pink": return .pink
-        default: return .blue
-        }
     }
 }
 
@@ -237,92 +219,45 @@ struct AddCountdownSheet: View {
     let colors: [String]
     let onSave: () -> Void
     let onCancel: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 20) {
-            Text("添加关键日期")
-                .font(.title2)
-                .fontWeight(.bold)
-            
+        FormSheet(title: "添加关键日期", width: 450) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("日期名称")
                     .font(.headline)
                 TextField("例如：期末复习完成节点", text: $title)
                     .textFieldStyle(.roundedBorder)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("选择日期")
                     .font(.headline)
                 DatePicker("日期", selection: $date, displayedComponents: .date)
                     .datePickerStyle(.graphical)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("选择图标")
                     .font(.headline)
-                
-                HStack {
-                    ForEach(icons, id: \.self) { icon in
-                        Button(action: { self.icon = icon }) {
-                            Text(icon)
-                                .font(.system(size: 24))
-                                .padding(6)
-                                .background(self.icon == icon ? Color.blue.opacity(0.2) : Color.clear)
-                                .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+
+                IconChoiceGrid(icons: icons, selection: $icon, columns: 5, iconSize: 24)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("选择颜色")
                     .font(.headline)
-                
-                HStack {
-                    ForEach(colors, id: \.self) { color in
-                        Button(action: { self.color = color }) {
-                            Circle()
-                                .fill(colorFromString(color))
-                                .frame(width: 30, height: 30)
-                                .overlay(
-                                    Circle()
-                                        .stroke(self.color == color ? Color.black : Color.clear, lineWidth: 2)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+
+                ColorSwatchPicker(colors: colors, selection: $color)
             }
-            
+
             Toggle("每年重复", isOn: $isRepeat)
                 .font(.headline)
-            
-            HStack {
-                Button("取消", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("保存", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(30)
-        .frame(width: 450)
-    }
-    
-    private func colorFromString(_ colorString: String) -> Color {
-        switch colorString {
-        case "red": return .red
-        case "green": return .green
-        case "blue": return .blue
-        case "purple": return .purple
-        case "orange": return .orange
-        case "pink": return .pink
-        default: return .blue
+
+            SheetActions(
+                isSaveDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onCancel: onCancel,
+                onSave: onSave
+            )
         }
     }
 }

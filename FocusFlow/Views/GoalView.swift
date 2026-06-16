@@ -6,7 +6,7 @@ struct GoalView: View {
     @State private var newGoalTitle = ""
     @State private var newGoalDescription = ""
     @State private var newGoalTargetDate = Date().addingTimeInterval(30 * 24 * 3600)
-    
+
     var body: some View {
         AppPage(
             title: "长期目标",
@@ -17,7 +17,7 @@ struct GoalView: View {
             action: { showAddGoal = true }
         ) {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
+                MetricStrip {
                     MetricCard(
                         title: "进行中",
                         value: "\(activeGoalCount) 个",
@@ -25,7 +25,7 @@ struct GoalView: View {
                         icon: "target",
                         color: .blue
                     )
-                    
+
                     MetricCard(
                         title: "已完成",
                         value: "\(completedGoalCount) 个",
@@ -33,7 +33,7 @@ struct GoalView: View {
                         icon: "checkmark.circle.fill",
                         color: .green
                     )
-                    
+
                     MetricCard(
                         title: "里程碑",
                         value: "\(completedMilestoneCount)/\(milestoneCount)",
@@ -42,7 +42,7 @@ struct GoalView: View {
                         color: .orange
                     )
                 }
-                
+
                 List {
                     ForEach(dataStore.goals) { goal in
                         GoalRow(goal: goal)
@@ -53,12 +53,7 @@ struct GoalView: View {
                         }
                     }
                 }
-                .listStyle(.inset)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.appStroke)
-                )
+                .appListContainer(minHeight: 380)
                 .overlay {
                     if dataStore.goals.isEmpty {
                         EmptyStateView(
@@ -68,7 +63,6 @@ struct GoalView: View {
                         )
                     }
                 }
-                .frame(minHeight: 380)
             }
         }
         .sheet(isPresented: $showAddGoal) {
@@ -80,7 +74,7 @@ struct GoalView: View {
                     let trimmedTitle = newGoalTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     let trimmedDescription = newGoalDescription.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedTitle.isEmpty else { return }
-                    
+
                     let goal = Goal(
                         title: trimmedTitle,
                         description: trimmedDescription,
@@ -97,25 +91,25 @@ struct GoalView: View {
             )
         }
     }
-    
+
     private func resetNewGoal() {
         newGoalTitle = ""
         newGoalDescription = ""
         newGoalTargetDate = Date().addingTimeInterval(30 * 24 * 3600)
     }
-    
+
     private var activeGoalCount: Int {
         dataStore.goals.filter { $0.progress < 100 }.count
     }
-    
+
     private var completedGoalCount: Int {
         dataStore.goals.filter { $0.progress >= 100 }.count
     }
-    
+
     private var milestoneCount: Int {
         dataStore.goals.reduce(0) { $0 + $1.milestones.count }
     }
-    
+
     private var completedMilestoneCount: Int {
         dataStore.goals.reduce(0) { total, goal in
             total + goal.milestones.filter(\.isCompleted).count
@@ -127,7 +121,7 @@ struct GoalRow: View {
     @EnvironmentObject var dataStore: DataStore
     let goal: Goal
     @State private var showDetail = false
-    
+
     var daysRemaining: Int {
         let calendar = Calendar.current
         return calendar.dateComponents(
@@ -136,30 +130,42 @@ struct GoalRow: View {
             to: calendar.startOfDay(for: goal.targetDate)
         ).day ?? 0
     }
-    
+
     var daysText: String {
         if goal.progress >= 100 {
             return "已完成"
         }
-        
+
         if daysRemaining < 0 {
             return "逾期 \(-daysRemaining) 天"
         }
-        
+
         if daysRemaining == 0 {
             return "今天到期"
         }
-        
+
         return "剩余 \(daysRemaining) 天"
     }
-    
+
+    var badgeColor: Color {
+        if goal.progress >= 100 {
+            return .green
+        }
+
+        if daysRemaining < 0 {
+            return .red
+        }
+
+        return daysRemaining <= 7 ? .orange : .blue
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(goal.title)
                         .font(.headline)
-                    
+
                     if !goal.goalDescription.isEmpty {
                         Text(goal.goalDescription)
                             .font(.subheadline)
@@ -167,38 +173,38 @@ struct GoalRow: View {
                             .lineLimit(2)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 VStack(alignment: .trailing, spacing: 4) {
                     PillBadge(
                         text: daysText,
-                        color: goal.progress >= 100 ? .green : (daysRemaining < 7 ? .red : .blue)
+                        color: badgeColor
                     )
-                    
+
                     Text(goal.targetDate, style: .date)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("推进进度")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     Spacer()
-                    
+
                     Text("\(Int(goal.progress))%")
                         .font(.caption)
                         .fontWeight(.bold)
                 }
-                
+
                 ProgressView(value: goal.progress / 100)
                     .progressViewStyle(.linear)
                     .tint(goal.progress >= 100 ? .green : .blue)
-                
+
                 Slider(
                     value: Binding(
                         get: { goal.progress },
@@ -208,13 +214,13 @@ struct GoalRow: View {
                     step: 5
                 )
             }
-            
+
             if !goal.milestones.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("里程碑")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     ForEach(goal.milestones) { milestone in
                         HStack {
                             Button(action: {
@@ -224,7 +230,7 @@ struct GoalRow: View {
                                     .foregroundColor(milestone.isCompleted ? .green : .gray)
                             }
                             .buttonStyle(.plain)
-                            
+
                             Text(milestone.title)
                                 .font(.subheadline)
                                 .strikethrough(milestone.isCompleted)
@@ -232,7 +238,7 @@ struct GoalRow: View {
                     }
                 }
             }
-            
+
             Button(action: { showDetail = true }) {
                 Label("补一个里程碑", systemImage: "plus.circle")
                     .font(.caption)
@@ -240,7 +246,6 @@ struct GoalRow: View {
             .buttonStyle(.plain)
             .popover(isPresented: $showDetail) {
                 AddMilestoneView(goal: goal)
-                    .frame(width: 300)
             }
         }
         .padding(.vertical, 8)
@@ -252,24 +257,20 @@ struct AddMilestoneView: View {
     @Environment(\.dismiss) private var dismiss
     let goal: Goal
     @State private var milestoneTitle = ""
-    
+
     var body: some View {
-        VStack(spacing: 15) {
-            Text("添加里程碑")
-                .font(.headline)
-            
+        FormSheet(title: "添加里程碑", width: 300) {
             TextField("例如：完成第一版方案", text: $milestoneTitle)
                 .textFieldStyle(.roundedBorder)
-            
-            HStack {
-                Button("取消") {
+
+            SheetActions(
+                saveTitle: "添加",
+                isSaveDisabled: milestoneTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onCancel: {
                     milestoneTitle = ""
                     dismiss()
-                }
-                
-                Spacer()
-                
-                Button("添加") {
+                },
+                onSave: {
                     let trimmedTitle = milestoneTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmedTitle.isEmpty {
                         let milestone = Milestone(title: trimmedTitle)
@@ -278,10 +279,8 @@ struct AddMilestoneView: View {
                         dismiss()
                     }
                 }
-                .disabled(milestoneTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            )
         }
-        .padding()
     }
 }
 
@@ -291,20 +290,16 @@ struct AddGoalSheet: View {
     @Binding var targetDate: Date
     let onSave: () -> Void
     let onCancel: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 20) {
-            Text("建立长期目标")
-                .font(.title2)
-                .fontWeight(.bold)
-            
+        FormSheet(title: "建立长期目标") {
             VStack(alignment: .leading, spacing: 10) {
                 Text("目标标题")
                     .font(.headline)
                 TextField("例如：30 天完成 SwiftUI 作品集", text: $title)
                     .textFieldStyle(.roundedBorder)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("为什么值得坚持")
                     .font(.headline)
@@ -314,26 +309,19 @@ struct AddGoalSheet: View {
                     minHeight: 110
                 )
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("目标日期")
                     .font(.headline)
                 DatePicker("目标日期", selection: $targetDate, displayedComponents: .date)
                     .datePickerStyle(.compact)
             }
-            
-            HStack {
-                Button("取消", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("保存", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+
+            SheetActions(
+                isSaveDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onCancel: onCancel,
+                onSave: onSave
+            )
         }
-        .padding(30)
-        .frame(width: 400)
     }
 }

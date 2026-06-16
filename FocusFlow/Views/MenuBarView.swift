@@ -2,9 +2,11 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var dataStore: DataStore
+    @EnvironmentObject var pomodoroTimer: PomodoroTimerController
+    @EnvironmentObject var timeTracker: TimeTrackerController
     @Environment(\.openWindow) private var openWindow
     @State private var quickTaskTitle = ""
-    
+
     var body: some View {
         VStack(spacing: 15) {
             // 标题
@@ -22,9 +24,38 @@ struct MenuBarView: View {
                 Spacer()
             }
             .padding(.horizontal)
-            
+
+            if pomodoroTimer.currentSession != nil || timeTracker.isTracking {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("正在进行")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+
+                    if pomodoroTimer.currentSession != nil {
+                        MenuStatusRow(
+                            icon: "timer",
+                            title: pomodoroTimer.statusText,
+                            detail: String(format: "%02d:%02d", pomodoroTimer.minutes, pomodoroTimer.seconds),
+                            color: pomodoroTimer.isRunning ? .green : .orange
+                        )
+                    }
+
+                    if timeTracker.isTracking {
+                        MenuStatusRow(
+                            icon: "record.circle",
+                            title: timeTracker.selectedCategory,
+                            detail: timeString(from: timeTracker.elapsedTime),
+                            color: .green
+                        )
+                    }
+                }
+            }
+
             Divider()
-            
+
             // 快速操作
             VStack(spacing: 10) {
                 // 番茄钟快捷操作
@@ -42,7 +73,7 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut("p", modifiers: .command)
-                
+
                 // 快速添加任务
                 HStack {
                     Image(systemName: "plus.circle")
@@ -55,16 +86,16 @@ struct MenuBarView: View {
                 }
                 .padding(.horizontal)
             }
-            
+
             Divider()
-            
+
             // 今日统计
             VStack(alignment: .leading, spacing: 8) {
                 Text("今日统计")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
-                
+
                 HStack {
                     MenuStatItem(
                         icon: "timer",
@@ -72,14 +103,14 @@ struct MenuBarView: View {
                         label: "专注",
                         color: .green
                     )
-                    
+
                     MenuStatItem(
                         icon: "checkmark.circle",
                         value: "\(todayCompletedTasks)",
                         label: "完成",
                         color: .blue
                     )
-                    
+
                     MenuStatItem(
                         icon: "star",
                         value: "\(todayHabitCount)",
@@ -89,16 +120,16 @@ struct MenuBarView: View {
                 }
                 .padding(.horizontal)
             }
-            
+
             Divider()
-            
+
             // 即将到来的事件
             VStack(alignment: .leading, spacing: 8) {
                 Text("即将到来")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
-                
+
                 if upcomingEvents.isEmpty {
                     Text("暂无临近节点")
                         .font(.subheadline)
@@ -120,9 +151,9 @@ struct MenuBarView: View {
                     }
                 }
             }
-            
+
             Divider()
-            
+
             // 打开主窗口
             Button(action: openMainWindow) {
                 HStack {
@@ -133,7 +164,7 @@ struct MenuBarView: View {
                 .padding(.horizontal)
             }
             .buttonStyle(.plain)
-            
+
             // 退出
             Button(action: {
                 NSApplication.shared.terminate(nil)
@@ -152,27 +183,23 @@ struct MenuBarView: View {
         .padding(.vertical, 10)
         .frame(width: 250)
     }
-    
+
     private var todayPomodoroCount: Int {
         dataStore.pomodoroSessions.filter {
             Calendar.current.isDateInToday($0.startTime) && $0.isCompleted
         }.count
     }
-    
+
     private var todayCompletedTasks: Int {
         dataStore.tasks.filter {
             $0.isCompleted && $0.completedAt != nil && Calendar.current.isDateInToday($0.completedAt!)
         }.count
     }
-    
+
     private var todayHabitCount: Int {
-        dataStore.habits.filter { habit in
-            habit.records.contains { record in
-                Calendar.current.isDateInToday(record.date) && record.isCompleted
-            }
-        }.count
+        dataStore.habits.filter { $0.isCompleted() }.count
     }
-    
+
     private var upcomingEvents: [CountdownEvent] {
         dataStore.countdownEvents
             .filter { $0.daysRemaining >= 0 }
@@ -180,18 +207,25 @@ struct MenuBarView: View {
             .prefix(3)
             .map { $0 }
     }
-    
+
     private func openMainWindow() {
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
-    
+
     private func addQuickTask() {
         let trimmedTitle = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
-        
+
         dataStore.addTask(TaskItem(title: trimmedTitle))
         quickTaskTitle = ""
+    }
+
+    private func timeString(from timeInterval: TimeInterval) -> String {
+        let hours = Int(timeInterval) / 3600
+        let minutes = Int(timeInterval) % 3600 / 60
+        let seconds = Int(timeInterval) % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, seconds) : String(format: "%02d:%02d", minutes, seconds)
     }
 }
 
@@ -200,7 +234,7 @@ struct MenuStatItem: View {
     let value: String
     let label: String
     let color: Color
-    
+
     var body: some View {
         VStack {
             Image(systemName: icon)
@@ -213,5 +247,31 @@ struct MenuStatItem: View {
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+struct MenuStatusRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .frame(width: 18)
+
+            Text(title)
+                .font(.subheadline)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(detail)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal)
     }
 }

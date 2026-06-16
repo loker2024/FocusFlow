@@ -13,7 +13,8 @@ let package = Package(
         .executableTarget(
             name: "FocusFlow",
             dependencies: [],
-            path: "FocusFlow"
+            path: "FocusFlow",
+            exclude: ["Info.plist"]
         )
     ]
 )

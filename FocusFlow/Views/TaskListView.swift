@@ -8,16 +8,16 @@ struct TaskListView: View {
     @State private var newTaskPriority: TaskItem.Priority = .medium
     @State private var searchText = ""
     @State private var filterStatus: TaskFilter = .all
-    
+
     enum TaskFilter: String, CaseIterable {
         case all = "全部"
         case pending = "待办"
         case completed = "已完成"
     }
-    
+
     var filteredTasks: [TaskItem] {
         var tasks = dataStore.tasks
-        
+
         // 搜索过滤
         if !searchText.isEmpty {
             tasks = tasks.filter {
@@ -25,7 +25,7 @@ struct TaskListView: View {
                 $0.taskDescription.localizedCaseInsensitiveContains(searchText)
             }
         }
-        
+
         // 状态过滤
         switch filterStatus {
         case .all:
@@ -35,7 +35,7 @@ struct TaskListView: View {
         case .completed:
             tasks = tasks.filter { $0.isCompleted }
         }
-        
+
         return tasks.sorted { lhs, rhs in
             if lhs.isCompleted != rhs.isCompleted {
                 return !lhs.isCompleted
@@ -43,7 +43,7 @@ struct TaskListView: View {
             return lhs.createdAt > rhs.createdAt
         }
     }
-    
+
     var body: some View {
         AppPage(
             title: "行动清单",
@@ -56,7 +56,7 @@ struct TaskListView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 12) {
                     SearchField(text: $searchText)
-                    
+
                     Picker("状态", selection: $filterStatus) {
                         ForEach(TaskFilter.allCases, id: \.self) { filter in
                             Text(filter.rawValue).tag(filter)
@@ -65,8 +65,8 @@ struct TaskListView: View {
                     .pickerStyle(.segmented)
                     .frame(width: 210)
                 }
-                
-                HStack(spacing: 12) {
+
+                MetricStrip {
                     MetricCard(
                         title: "待推进",
                         value: "\(pendingCount) 项",
@@ -89,7 +89,7 @@ struct TaskListView: View {
                         color: .blue
                     )
                 }
-                
+
                 List {
                     ForEach(filteredTasks) { task in
                         TaskRow(task: task)
@@ -100,12 +100,7 @@ struct TaskListView: View {
                         }
                     }
                 }
-                .listStyle(.inset)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.appStroke)
-                )
+                .appListContainer(minHeight: 340)
                 .overlay {
                     if filteredTasks.isEmpty {
                         EmptyStateView(
@@ -115,7 +110,6 @@ struct TaskListView: View {
                         )
                     }
                 }
-                .frame(minHeight: 340)
             }
         }
         .sheet(isPresented: $showAddTask) {
@@ -127,7 +121,7 @@ struct TaskListView: View {
                     let trimmedTitle = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     let trimmedDescription = newTaskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedTitle.isEmpty else { return }
-                    
+
                     let task = TaskItem(
                         title: trimmedTitle,
                         description: trimmedDescription,
@@ -144,21 +138,21 @@ struct TaskListView: View {
             )
         }
     }
-    
+
     private func resetNewTask() {
         newTaskTitle = ""
         newTaskDescription = ""
         newTaskPriority = .medium
     }
-    
+
     private var pendingCount: Int {
         dataStore.tasks.filter { !$0.isCompleted }.count
     }
-    
+
     private var completedCount: Int {
         dataStore.tasks.filter(\.isCompleted).count
     }
-    
+
     private var completionRate: Int {
         guard !dataStore.tasks.isEmpty else { return 0 }
         return Int((Double(completedCount) / Double(dataStore.tasks.count) * 100).rounded())
@@ -168,7 +162,7 @@ struct TaskListView: View {
 struct TaskRow: View {
     @EnvironmentObject var dataStore: DataStore
     let task: TaskItem
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Button(action: {
@@ -179,35 +173,35 @@ struct TaskRow: View {
                     .font(.title2)
             }
             .buttonStyle(.plain)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
                     .font(.headline)
                     .strikethrough(task.isCompleted)
                     .foregroundColor(task.isCompleted ? .secondary : .primary)
-                
+
                 if !task.taskDescription.isEmpty {
                     Text(task.taskDescription)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
-                
+
                 HStack {
                     PillBadge(text: task.priority.rawValue, color: priorityColor(task.priority))
-                    
+
                     Text(task.createdAt, style: .date)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Spacer()
         }
         .padding(.vertical, 8)
         .contentShape(Rectangle())
     }
-    
+
     private func priorityColor(_ priority: TaskItem.Priority) -> Color {
         switch priority {
         case .low: return .gray
@@ -220,7 +214,7 @@ struct TaskRow: View {
 
 struct SearchField: View {
     @Binding var text: String
-    
+
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
@@ -251,20 +245,16 @@ struct AddTaskSheet: View {
     @Binding var priority: TaskItem.Priority
     let onSave: () -> Void
     let onCancel: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 20) {
-            Text("添加行动项")
-                .font(.title2)
-                .fontWeight(.bold)
-            
+        FormSheet(title: "添加行动项") {
             VStack(alignment: .leading, spacing: 10) {
                 Text("下一步")
                     .font(.headline)
                 TextField("例如：完成一页复盘提纲", text: $title)
                     .textFieldStyle(.roundedBorder)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("补充说明")
                     .font(.headline)
@@ -274,7 +264,7 @@ struct AddTaskSheet: View {
                     minHeight: 110
                 )
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("优先级")
                     .font(.headline)
@@ -285,19 +275,12 @@ struct AddTaskSheet: View {
                 }
                 .pickerStyle(.segmented)
             }
-            
-            HStack {
-                Button("取消", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("保存", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+
+            SheetActions(
+                isSaveDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onCancel: onCancel,
+                onSave: onSave
+            )
         }
-        .padding(30)
-        .frame(width: 400)
     }
 }

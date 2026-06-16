@@ -6,9 +6,9 @@ struct HabitView: View {
     @State private var newHabitName = ""
     @State private var newHabitIcon = "✅"
     @State private var newHabitFrequency: Habit.Frequency = .daily
-    
+
     let icons = ["✅", "💪", "📚", "🏃", "💧", "🧘", "🎯", "💡", "🌟", "🔥"]
-    
+
     var body: some View {
         AppPage(
             title: "习惯积累",
@@ -19,23 +19,23 @@ struct HabitView: View {
             action: { showAddHabit = true }
         ) {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
+                MetricStrip {
                     MetricCard(
-                        title: "今日完成",
+                        title: "本期完成",
                         value: "\(todayCompletedCount)/\(dataStore.habits.count)",
-                        caption: dataStore.habits.isEmpty ? "先建立一个微习惯" : "保持今天的闭环",
+                        caption: dataStore.habits.isEmpty ? "先建立一个微习惯" : "保持当期的闭环",
                         icon: "checkmark.circle.fill",
                         color: .green
                     )
-                    
+
                     MetricCard(
                         title: "最长连续",
-                        value: "\(longestStreak) 天",
+                        value: longestStreakText,
                         caption: "连续性会降低启动成本",
                         icon: "flame.fill",
                         color: .orange
                     )
-                    
+
                     MetricCard(
                         title: "完成率",
                         value: "\(completionRate)%",
@@ -44,7 +44,7 @@ struct HabitView: View {
                         color: .blue
                     )
                 }
-                
+
                 List {
                     ForEach(dataStore.habits) { habit in
                         HabitRow(habit: habit)
@@ -55,12 +55,7 @@ struct HabitView: View {
                         }
                     }
                 }
-                .listStyle(.inset)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.appStroke)
-                )
+                .appListContainer(minHeight: 360)
                 .overlay {
                     if dataStore.habits.isEmpty {
                         EmptyStateView(
@@ -70,7 +65,6 @@ struct HabitView: View {
                         )
                     }
                 }
-                .frame(minHeight: 360)
             }
         }
         .sheet(isPresented: $showAddHabit) {
@@ -82,7 +76,7 @@ struct HabitView: View {
                 onSave: {
                     let trimmedName = newHabitName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedName.isEmpty else { return }
-                    
+
                     let habit = Habit(
                         name: trimmedName,
                         icon: newHabitIcon,
@@ -99,23 +93,27 @@ struct HabitView: View {
             )
         }
     }
-    
+
     private func resetNewHabit() {
         newHabitName = ""
         newHabitIcon = "✅"
         newHabitFrequency = .daily
     }
-    
+
     private var todayCompletedCount: Int {
         dataStore.habits.filter { habit in
             habit.isCompleted()
         }.count
     }
-    
-    private var longestStreak: Int {
-        dataStore.habits.map { $0.currentStreak() }.max() ?? 0
+
+    private var longestStreakText: String {
+        guard let bestHabit = dataStore.habits.max(by: { $0.currentStreak() < $1.currentStreak() }) else {
+            return "0 天"
+        }
+
+        return "\(bestHabit.currentStreak()) \(bestHabit.frequency.streakUnit)"
     }
-    
+
     private var completionRate: Int {
         guard !dataStore.habits.isEmpty else { return 0 }
         return Int((Double(todayCompletedCount) / Double(dataStore.habits.count) * 100).rounded())
@@ -125,15 +123,15 @@ struct HabitView: View {
 struct HabitRow: View {
     @EnvironmentObject var dataStore: DataStore
     let habit: Habit
-    
+
     var isCompletedToday: Bool {
         habit.isCompleted()
     }
-    
+
     var streak: Int {
         habit.currentStreak()
     }
-    
+
     var body: some View {
         HStack(spacing: 14) {
             Text(habit.icon)
@@ -141,26 +139,26 @@ struct HabitRow: View {
                 .frame(width: 52, height: 52)
                 .background(Color.appMutedAccent)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(habit.name)
                     .font(.headline)
-                
+
                 HStack {
                     Text(habit.frequency.rawValue)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     if streak > 0 {
-                        Text("• 连续 \(streak) 天")
+                        Text("• 连续 \(streak) \(habit.frequency.streakUnit)")
                             .font(.caption)
                             .foregroundColor(.orange)
                     }
                 }
             }
-            
+
             Spacer()
-            
+
             Button(action: {
                 dataStore.toggleHabit(habit)
             }) {
@@ -181,38 +179,23 @@ struct AddHabitSheet: View {
     let icons: [String]
     let onSave: () -> Void
     let onCancel: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 20) {
-            Text("建立新习惯")
-                .font(.title2)
-                .fontWeight(.bold)
-            
+        FormSheet(title: "建立新习惯") {
             VStack(alignment: .leading, spacing: 10) {
                 Text("习惯动作")
                     .font(.headline)
                 TextField("例如：睡前复盘 5 分钟", text: $name)
                     .textFieldStyle(.roundedBorder)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("选择图标")
                     .font(.headline)
-                
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 10) {
-                    ForEach(icons, id: \.self) { icon in
-                        Button(action: { self.icon = icon }) {
-                            Text(icon)
-                                .font(.system(size: 32))
-                                .padding(8)
-                                .background(self.icon == icon ? Color.blue.opacity(0.2) : Color.clear)
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+
+                IconChoiceGrid(icons: icons, selection: $icon)
             }
-            
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("频率")
                     .font(.headline)
@@ -223,19 +206,12 @@ struct AddHabitSheet: View {
                 }
                 .pickerStyle(.segmented)
             }
-            
-            HStack {
-                Button("取消", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("保存", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+
+            SheetActions(
+                isSaveDisabled: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onCancel: onCancel,
+                onSave: onSave
+            )
         }
-        .padding(30)
-        .frame(width: 400)
     }
 }
