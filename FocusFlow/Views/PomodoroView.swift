@@ -8,6 +8,7 @@ struct PomodoroView: View {
     @State private var currentSession: PomodoroSession?
     @State private var taskName: String = ""
     @State private var selectedDuration: Int = 25
+    @FocusState private var isTextFieldFocused: Bool
     
     let durations = [15, 25, 30, 45, 60]
     
@@ -41,6 +42,11 @@ struct PomodoroView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 300)
+                .onChange(of: selectedDuration) { newValue in
+                    if !isRunning {
+                        timeRemaining = newValue * 60
+                    }
+                }
             }
             
             // 计时器显示
@@ -74,6 +80,7 @@ struct PomodoroView: View {
                 TextField("正在做什么...", text: $taskName)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 250)
+                    .focused($isTextFieldFocused)
             }
             
             // 控制按钮
