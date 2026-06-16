@@ -15,7 +15,7 @@ struct TaskListView: View {
         case completed = "已完成"
     }
     
-    var filteredTasks: [Task] {
+    var filteredTasks: [TaskItem] {
         var tasks = dataStore.tasks
         
         // 搜索过滤
@@ -100,7 +100,7 @@ struct TaskListView: View {
                 description: $newTaskDescription,
                 priority: $newTaskPriority,
                 onSave: {
-                    let task = Task(
+                    let task = TaskItem(
                         title: newTaskTitle,
                         description: newTaskDescription,
                         priority: newTaskPriority
