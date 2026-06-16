@@ -2,8 +2,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var dataStore: DataStore
-    @State private var showPomodoro = false
-    @State private var showQuickTask = false
+    @Environment(\.openWindow) private var openWindow
     @State private var quickTaskTitle = ""
     
     var body: some View {
@@ -13,8 +12,13 @@ struct MenuBarView: View {
                 Image(systemName: "timer")
                     .font(.title2)
                     .foregroundColor(.blue)
-                Text("FocusFlow")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FocusFlow")
+                        .font(.headline)
+                    Text("今天也往前推一点")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
             }
             .padding(.horizontal)
@@ -24,11 +28,11 @@ struct MenuBarView: View {
             // 快速操作
             VStack(spacing: 10) {
                 // 番茄钟快捷操作
-                Button(action: { showPomodoro = true }) {
+                Button(action: openMainWindow) {
                     HStack {
                         Image(systemName: "timer")
                             .foregroundColor(.green)
-                        Text("启动番茄钟")
+                        Text("进入专注训练")
                         Spacer()
                         Text("⌘P")
                             .font(.caption)
@@ -37,19 +41,16 @@ struct MenuBarView: View {
                     .padding(.horizontal)
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut("p", modifiers: .command)
                 
                 // 快速添加任务
                 HStack {
                     Image(systemName: "plus.circle")
                         .foregroundColor(.blue)
-                    TextField("快速添加任务...", text: $quickTaskTitle)
+                    TextField("写下一个下一步...", text: $quickTaskTitle)
                         .textFieldStyle(.plain)
                         .onSubmit {
-                            if !quickTaskTitle.isEmpty {
-                                let task = TaskItem(title: quickTaskTitle)
-                                dataStore.addTask(task)
-                                quickTaskTitle = ""
-                            }
+                            addQuickTask()
                         }
                 }
                 .padding(.horizontal)
@@ -68,21 +69,21 @@ struct MenuBarView: View {
                     MenuStatItem(
                         icon: "timer",
                         value: "\(todayPomodoroCount)",
-                        label: "番茄",
+                        label: "专注",
                         color: .green
                     )
                     
                     MenuStatItem(
                         icon: "checkmark.circle",
                         value: "\(todayCompletedTasks)",
-                        label: "任务",
+                        label: "完成",
                         color: .blue
                     )
                     
                     MenuStatItem(
                         icon: "star",
                         value: "\(todayHabitCount)",
-                        label: "打卡",
+                        label: "习惯",
                         color: .orange
                     )
                 }
@@ -98,29 +99,35 @@ struct MenuBarView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
                 
-                ForEach(upcomingEvents) { event in
-                    HStack {
-                        Text(event.icon)
-                        Text(event.title)
-                            .font(.subheadline)
-                        Spacer()
-                        Text("\(event.daysRemaining)天")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                if upcomingEvents.isEmpty {
+                    Text("暂无临近节点")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ForEach(upcomingEvents) { event in
+                        HStack {
+                            Text(event.icon)
+                            Text(event.title)
+                                .font(.subheadline)
+                            Spacer()
+                            Text(event.daysRemaining == 0 ? "今天" : "\(event.daysRemaining)天")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
             
             Divider()
             
             // 打开主窗口
-            Button(action: {
-                NSApplication.shared.activate(ignoringOtherApps: true)
-            }) {
+            Button(action: openMainWindow) {
                 HStack {
                     Image(systemName: "window")
-                    Text("打开主窗口")
+                    Text("打开成长面板")
                     Spacer()
                 }
                 .padding(.horizontal)
@@ -168,10 +175,23 @@ struct MenuBarView: View {
     
     private var upcomingEvents: [CountdownEvent] {
         dataStore.countdownEvents
-            .filter { $0.daysRemaining > 0 }
+            .filter { $0.daysRemaining >= 0 }
             .sorted { $0.daysRemaining < $1.daysRemaining }
             .prefix(3)
             .map { $0 }
+    }
+    
+    private func openMainWindow() {
+        openWindow(id: "main")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+    
+    private func addQuickTask() {
+        let trimmedTitle = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        
+        dataStore.addTask(TaskItem(title: trimmedTitle))
+        quickTaskTitle = ""
     }
 }
 
@@ -195,4 +215,3 @@ struct MenuStatItem: View {
         .frame(maxWidth: .infinity)
     }
 }
-

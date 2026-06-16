@@ -5,21 +5,21 @@ struct ContentView: View {
     @State private var selectedTab: Tab = .pomodoro
     
     enum Tab: String, CaseIterable {
-        case pomodoro = "番茄钟"
-        case timeTracker = "时间追踪"
-        case tasks = "任务管理"
-        case workLog = "工作日志"
-        case habits = "打卡"
-        case goals = "目标"
-        case countdown = "倒数日"
+        case pomodoro = "专注训练"
+        case timeTracker = "时间账本"
+        case tasks = "行动清单"
+        case workLog = "每日复盘"
+        case habits = "习惯积累"
+        case goals = "长期目标"
+        case countdown = "关键日期"
         
         var icon: String {
             switch self {
             case .pomodoro: return "timer"
-            case .timeTracker: return "clock"
+            case .timeTracker: return "chart.bar.doc.horizontal"
             case .tasks: return "checklist"
-            case .workLog: return "doc.text"
-            case .habits: return "star"
+            case .workLog: return "book.closed"
+            case .habits: return "leaf"
             case .goals: return "target"
             case .countdown: return "calendar"
             }
@@ -32,6 +32,7 @@ struct ContentView: View {
                 Label(tab.rawValue, systemImage: tab.icon)
                     .tag(tab)
             }
+            .navigationTitle("FocusFlow")
             .navigationSplitViewColumnWidth(min: 150, ideal: 180)
         } detail: {
             Group {
@@ -57,4 +58,3 @@ struct ContentView: View {
         }
     }
 }
-

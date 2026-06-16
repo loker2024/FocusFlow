@@ -26,115 +26,140 @@ struct PomodoroView: View {
     }
     
     var body: some View {
-        VStack(spacing: 30) {
-            // 标题
-            Text("番茄钟")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            
-            // 时长选择
-            HStack {
-                Text("时长:")
-                    .font(.headline)
-                Picker("时长", selection: $selectedDuration) {
-                    ForEach(durations, id: \.self) { duration in
-                        Text("\(duration) 分钟").tag(duration)
+        AppPage(
+            title: "专注训练",
+            subtitle: "把一天切成可完成的专注块，每一轮都在训练注意力和执行力。",
+            icon: "timer"
+        ) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack(alignment: .top, spacing: 24) {
+                        SectionPanel(title: "当前一轮", subtitle: focusPrompt) {
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.secondary.opacity(0.16), lineWidth: 18)
+                                    .frame(width: 236, height: 236)
+                                
+                                Circle()
+                                    .trim(from: 0, to: progress)
+                                    .stroke(
+                                        isRunning ? Color.green : Color.accentColor,
+                                        style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                                    )
+                                    .frame(width: 236, height: 236)
+                                    .rotationEffect(.degrees(-90))
+                                    .animation(.linear(duration: 0.5), value: progress)
+                                
+                                VStack(spacing: 8) {
+                                    Text(String(format: "%02d:%02d", minutes, seconds))
+                                        .font(.system(size: 58, weight: .bold, design: .monospaced))
+                                        .minimumScaleFactor(0.8)
+                                    
+                                    Label(isRunning ? "沉浸中" : "准备开始", systemImage: isRunning ? "bolt.fill" : "sparkle")
+                                        .font(.callout.weight(.semibold))
+                                        .foregroundColor(isRunning ? .green : .secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    if isRunning {
+                                        pauseTimer()
+                                    } else {
+                                        startTimer()
+                                    }
+                                }) {
+                                    Label(isRunning ? "暂停" : "开始专注", systemImage: isRunning ? "pause.fill" : "play.fill")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity, minHeight: 46)
+                                        .background(isRunning ? Color.orange : Color.green)
+                                        .foregroundColor(.white)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Button(action: resetTimer) {
+                                    Label("重置", systemImage: "arrow.counterclockwise")
+                                        .font(.headline)
+                                        .frame(width: 118, height: 46)
+                                        .background(Color.secondary.opacity(0.18))
+                                        .foregroundColor(.primary)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        
+                        SectionPanel(title: "本轮设定", subtitle: "开始前只选一件事，降低切换成本。") {
+                            VStack(alignment: .leading, spacing: 18) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("专注时长")
+                                        .font(.subheadline.weight(.semibold))
+                                    Picker("专注时长", selection: $selectedDuration) {
+                                        ForEach(durations, id: \.self) { duration in
+                                            Text("\(duration)分").tag(duration)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .onChange(of: selectedDuration) { _, newValue in
+                                        if !isRunning {
+                                            timeRemaining = newValue * 60
+                                            totalTime = newValue * 60
+                                        }
+                                    }
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("今天推进什么")
+                                        .font(.subheadline.weight(.semibold))
+                                    TextField("例如：整理课程笔记第 2 节", text: $taskName)
+                                        .textFieldStyle(.roundedBorder)
+                                        .disabled(isRunning)
+                                }
+                                
+                                Text("小步开始，稳定结束。完成的一轮会进入今日统计。")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .frame(width: 320)
                     }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 300)
-                .onChange(of: selectedDuration) { _, newValue in
-                    if !isRunning {
-                        timeRemaining = newValue * 60
-                        totalTime = newValue * 60
-                    }
-                }
-            }
-            
-            // 计时器显示
-            ZStack {
-                // 背景圆环
-                Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 20)
-                    .frame(width: 250, height: 250)
-                
-                // 进度圆环
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(
-                        isRunning ? Color.green : Color.blue,
-                        style: StrokeStyle(lineWidth: 20, lineCap: .round)
-                    )
-                    .frame(width: 250, height: 250)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.5), value: progress)
-                
-                // 时间显示
-                VStack {
-                    Text(String(format: "%02d:%02d", minutes, seconds))
-                        .font(.system(size: 60, weight: .bold, design: .monospaced))
                     
-                    Text(isRunning ? "专注中..." : "准备开始")
-                        .font(.title3)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // 任务名称
-            VStack(alignment: .leading, spacing: 8) {
-                Text("任务名称")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                TextField("正在做什么...", text: $taskName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 250)
-                    .disabled(isRunning)
-            }
-            
-            // 控制按钮
-            HStack(spacing: 20) {
-                Button(action: {
-                    if isRunning {
-                        pauseTimer()
-                    } else {
-                        startTimer()
+                    HStack(spacing: 16) {
+                        MetricCard(
+                            title: "今日完成",
+                            value: "\(todayCompletedCount) 轮",
+                            caption: todayCompletedCount == 0 ? "先建立今天的起点" : "每轮都是一次兑现",
+                            icon: "checkmark.circle.fill",
+                            color: .green
+                        )
+                        MetricCard(
+                            title: "专注沉淀",
+                            value: "\(todayFocusMinutes) 分钟",
+                            caption: "只统计完整完成的专注块",
+                            icon: "clock.fill",
+                            color: .blue
+                        )
                     }
-                }) {
-                    Label(isRunning ? "暂停" : "开始", systemImage: isRunning ? "pause.fill" : "play.fill")
-                        .font(.title2)
-                        .frame(width: 120, height: 50)
-                        .background(isRunning ? Color.orange : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .buttonStyle(.plain)
-                
-                Button(action: resetTimer) {
-                    Label("重置", systemImage: "arrow.counterclockwise")
-                        .font(.title2)
-                        .frame(width: 120, height: 50)
-                        .background(Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .buttonStyle(.plain)
-            }
-            
-            // 今日统计
-            VStack(alignment: .leading, spacing: 10) {
-                Text("今日统计")
-                    .font(.headline)
-                
-                HStack {
-                    StatCard(title: "完成番茄", value: "\(todayCompletedCount)", icon: "checkmark.circle.fill", color: .green)
-                    StatCard(title: "专注时间", value: "\(todayFocusMinutes)分钟", icon: "clock.fill", color: .blue)
                 }
             }
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(10)
         }
-        .padding(40)
+        .onDisappear {
+            pauseTimer()
+        }
+    }
+    
+    private var focusPrompt: String {
+        if isRunning {
+            return "注意力跑开时，把它温和地带回当前这一件事。"
+        }
+        
+        if todayCompletedCount == 0 {
+            return "先完成一轮，让今天有一个可靠的起点。"
+        }
+        
+        return "今天已经完成 \(todayCompletedCount) 轮，继续把节奏往前推。"
     }
     
     private var todayCompletedCount: Int {
@@ -150,8 +175,13 @@ struct PomodoroView: View {
     }
     
     private func startTimer() {
+        timer?.invalidate()
+        
         if currentSession == nil {
-            currentSession = PomodoroSession(duration: selectedDuration, taskName: taskName)
+            currentSession = PomodoroSession(
+                duration: selectedDuration,
+                taskName: taskName.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
         }
         
         isRunning = true
@@ -184,7 +214,6 @@ struct PomodoroView: View {
         
         if let session = currentSession {
             dataStore.completePomodoroSession(session)
-            dataStore.addPomodoroSession(session)
             currentSession = nil
         }
         
@@ -193,34 +222,5 @@ struct PomodoroView: View {
         
         timeRemaining = selectedDuration * 60
         totalTime = selectedDuration * 60
-    }
-}
-
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-            
-            VStack(alignment: .leading) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(value)
-                    .font(.title3)
-                    .fontWeight(.bold)
-            }
-        }
-        .frame(width: 150)
-        .padding()
-        .background(Color.white)
-        .cornerRadius(8)
-        .shadow(radius: 2)
     }
 }

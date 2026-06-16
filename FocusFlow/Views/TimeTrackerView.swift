@@ -4,127 +4,135 @@ struct TimeTrackerView: View {
     @EnvironmentObject var dataStore: DataStore
     @State private var isTracking = false
     @State private var currentEntry: TimeEntry?
-    @State private var selectedCategory = "工作"
+    @State private var selectedCategory = "深度工作"
     @State private var project = ""
     @State private var note = ""
     @State private var elapsedTime: TimeInterval = 0
     @State private var timer: Timer?
     @State private var showHistory = false
     
-    let categories = ["工作", "学习", "运动", "阅读", "娱乐", "休息", "其他"]
+    let categories = ["深度工作", "学习输入", "阅读沉淀", "训练健康", "恢复休息", "日常事务", "其他"]
     
     var body: some View {
-        VStack(spacing: 30) {
-            // 标题
-            HStack {
-                Text("时间追踪")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button(action: { showHistory.toggle() }) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.title2)
-                }
-                .popover(isPresented: $showHistory) {
-                    TimeHistoryView()
-                        .frame(width: 400, height: 500)
-                }
-            }
-            
-            // 计时器显示
-            VStack {
-                Text(timeString(from: elapsedTime))
-                    .font(.system(size: 72, weight: .bold, design: .monospaced))
-                    .foregroundColor(isTracking ? .green : .primary)
-                
-                Text(isTracking ? "追踪中..." : "准备开始")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-            }
-            
-            // 输入区域
-            VStack(spacing: 15) {
-                HStack {
-                    Text("类别:")
-                        .frame(width: 60, alignment: .trailing)
-                    Picker("类别", selection: $selectedCategory) {
-                        ForEach(categories, id: \.self) { category in
-                            Text(category).tag(category)
+        AppPage(
+            title: "时间账本",
+            subtitle: "看见时间流向，才能把注意力投给真正会积累的事情。",
+            icon: "chart.bar.doc.horizontal",
+            actionTitle: "记录历史",
+            actionIcon: "clock.arrow.circlepath",
+            action: { showHistory.toggle() }
+        ) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack(alignment: .top, spacing: 24) {
+                        SectionPanel(title: "当前投入", subtitle: isTracking ? "这一段时间正在被认真记下。" : "开始前先给时间一个去向。") {
+                            VStack(spacing: 14) {
+                                Text(timeString(from: elapsedTime))
+                                    .font(.system(size: 68, weight: .bold, design: .monospaced))
+                                    .foregroundColor(isTracking ? .green : .primary)
+                                    .minimumScaleFactor(0.7)
+                                
+                                Label(isTracking ? "正在记录" : "等待开始", systemImage: isTracking ? "record.circle.fill" : "clock")
+                                    .font(.callout.weight(.semibold))
+                                    .foregroundColor(isTracking ? .green : .secondary)
+                                
+                                Button(action: {
+                                    if isTracking {
+                                        stopTracking()
+                                    } else {
+                                        startTracking()
+                                    }
+                                }) {
+                                    Label(isTracking ? "结束并入账" : "开始记录", systemImage: isTracking ? "stop.fill" : "play.fill")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity, minHeight: 46)
+                                        .background(isTracking ? Color.red : Color.green)
+                                        .foregroundColor(.white)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                
+                                if !isTracking {
+                                    Button(action: resetTracking) {
+                                        Label("清空计时", systemImage: "arrow.counterclockwise")
+                                            .frame(maxWidth: .infinity, minHeight: 36)
+                                    }
+                                }
+                            }
                         }
+                        
+                        SectionPanel(title: "记录标签", subtitle: "分类越清楚，复盘时越容易调整节奏。") {
+                            VStack(alignment: .leading, spacing: 16) {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("类别")
+                                            .font(.subheadline.weight(.semibold))
+                                        Picker("类别", selection: $selectedCategory) {
+                                            ForEach(categories, id: \.self) { category in
+                                                Text(category).tag(category)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("项目")
+                                            .font(.subheadline.weight(.semibold))
+                                        TextField("例如：FocusFlow 界面打磨", text: $project)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("备注")
+                                        .font(.subheadline.weight(.semibold))
+                                    TextField("记录投入目标、阻力或下一步", text: $note)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                            }
+                        }
+                        .frame(width: 360)
+                        .disabled(isTracking)
+                        .opacity(isTracking ? 0.62 : 1)
                     }
-                    .pickerStyle(.menu)
-                    .frame(width: 120)
                     
-                    Text("项目:")
-                        .frame(width: 60, alignment: .trailing)
-                    TextField("项目名称", text: $project)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 200)
-                }
-                
-                HStack {
-                    Text("备注:")
-                        .frame(width: 60, alignment: .trailing)
-                    TextField("添加备注...", text: $note)
-                        .textFieldStyle(.roundedBorder)
-                }
-            }
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(10)
-            
-            // 控制按钮
-            HStack(spacing: 20) {
-                Button(action: {
-                    if isTracking {
-                        stopTracking()
-                    } else {
-                        startTracking()
-                    }
-                }) {
-                    Label(isTracking ? "停止" : "开始", systemImage: isTracking ? "stop.fill" : "play.fill")
-                        .font(.title2)
-                        .frame(width: 150, height: 50)
-                        .background(isTracking ? Color.red : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                
-                if !isTracking {
-                    Button(action: resetTracking) {
-                        Label("重置", systemImage: "arrow.counterclockwise")
-                            .font(.title2)
-                            .frame(width: 120, height: 50)
-                            .background(Color.gray)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                }
-            }
-            
-            // 今日统计
-            VStack(alignment: .leading, spacing: 10) {
-                Text("今日统计")
-                    .font(.headline)
-                
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(todayCategories, id: \.self) { category in
-                            CategoryStatCard(
-                                category: category,
-                                duration: todayDuration(for: category)
+                    SectionPanel(title: "今日结构", subtitle: "不是每一分钟都要紧绷，但每一段都应该被看见。") {
+                        if todayCategories.isEmpty {
+                            EmptyStateView(
+                                icon: "clock.badge",
+                                title: "今天还没有入账",
+                                message: "先记录一段真实投入，晚上复盘时就有证据可看。"
                             )
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(todayCategories, id: \.self) { category in
+                                        CategoryStatCard(
+                                            category: category,
+                                            duration: todayDuration(for: category)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(10)
         }
-        .padding(40)
+        .popover(isPresented: $showHistory) {
+            TimeHistoryView()
+                .frame(width: 420, height: 520)
+        }
+        .onDisappear {
+            if isTracking {
+                stopTracking()
+            } else {
+                timer?.invalidate()
+                timer = nil
+            }
+        }
     }
     
     private var todayCategories: [String] {
@@ -148,22 +156,32 @@ struct TimeTrackerView: View {
     }
     
     private func startTracking() {
-        currentEntry = TimeEntry(category: selectedCategory, project: project, note: note)
+        timer?.invalidate()
+        
+        currentEntry = TimeEntry(
+            category: selectedCategory,
+            project: project.trimmingCharacters(in: .whitespacesAndNewlines),
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
         isTracking = true
         elapsedTime = 0
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            elapsedTime += 1
+            DispatchQueue.main.async {
+                if let entry = currentEntry {
+                    elapsedTime = Date().timeIntervalSince(entry.startTime)
+                }
+            }
         }
     }
     
     private func stopTracking() {
         isTracking = false
         timer?.invalidate()
+        timer = nil
         
         if let entry = currentEntry {
             dataStore.stopTimeEntry(entry)
-            dataStore.addTimeEntry(entry)
             currentEntry = nil
         }
         
@@ -195,9 +213,12 @@ struct CategoryStatCard: View {
         }
         .frame(width: 100)
         .padding()
-        .background(Color.white)
-        .cornerRadius(8)
-        .shadow(radius: 2)
+        .background(Color.appSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appStroke)
+        )
     }
     
     private var timeString: String {
@@ -241,6 +262,15 @@ struct TimeHistoryView: View {
                 }
                 .padding(.vertical, 4)
             }
+            .overlay {
+                if dataStore.timeEntries.isEmpty {
+                    EmptyStateView(
+                        icon: "tray",
+                        title: "暂无时间记录",
+                        message: "停止一次追踪后，记录会出现在这里。"
+                    )
+                }
+            }
         }
     }
     
@@ -250,4 +280,3 @@ struct TimeHistoryView: View {
         return String(format: "%dh%02dm", hours, minutes)
     }
 }
-

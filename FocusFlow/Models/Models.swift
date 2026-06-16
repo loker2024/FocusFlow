@@ -110,6 +110,33 @@ struct Habit: Codable, Identifiable {
         case weekly = "每周"
         case monthly = "每月"
     }
+    
+    func record(on date: Date, calendar: Calendar = .current) -> HabitRecord? {
+        records.first { record in
+            calendar.isDate(record.date, inSameDayAs: date)
+        }
+    }
+    
+    func isCompleted(on date: Date = Date(), calendar: Calendar = .current) -> Bool {
+        record(on: date, calendar: calendar)?.isCompleted == true
+    }
+    
+    func currentStreak(endingAt date: Date = Date(), calendar: Calendar = .current) -> Int {
+        var streak = 0
+        var currentDate = calendar.startOfDay(for: date)
+        
+        while isCompleted(on: currentDate, calendar: calendar) {
+            streak += 1
+            
+            guard let previousDate = calendar.date(byAdding: .day, value: -1, to: currentDate) else {
+                break
+            }
+            
+            currentDate = previousDate
+        }
+        
+        return streak
+    }
 }
 
 struct HabitRecord: Codable, Identifiable {
@@ -178,7 +205,41 @@ struct CountdownEvent: Codable, Identifiable {
         self.isRepeatYearly = isRepeatYearly
     }
     
+    func nextOccurrence(after referenceDate: Date = Date(), calendar: Calendar = .current) -> Date {
+        let today = calendar.startOfDay(for: referenceDate)
+        
+        guard isRepeatYearly else {
+            return calendar.startOfDay(for: date)
+        }
+        
+        let originalComponents = calendar.dateComponents([.month, .day], from: date)
+        let currentYear = calendar.component(.year, from: today)
+        
+        func occurrence(in year: Int) -> Date? {
+            var components = DateComponents()
+            components.year = year
+            components.month = originalComponents.month
+            components.day = originalComponents.day
+            return calendar.date(from: components).map { calendar.startOfDay(for: $0) }
+        }
+        
+        if let thisYear = occurrence(in: currentYear), thisYear >= today {
+            return thisYear
+        }
+        
+        return occurrence(in: currentYear + 1) ?? calendar.startOfDay(for: date)
+    }
+    
+    var nextOccurrenceDate: Date {
+        nextOccurrence()
+    }
+    
+    func daysRemaining(from referenceDate: Date = Date(), calendar: Calendar = .current) -> Int {
+        let today = calendar.startOfDay(for: referenceDate)
+        return calendar.dateComponents([.day], from: today, to: nextOccurrence(after: referenceDate, calendar: calendar)).day ?? 0
+    }
+    
     var daysRemaining: Int {
-        Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
+        daysRemaining()
     }
 }

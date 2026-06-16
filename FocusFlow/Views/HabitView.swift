@@ -10,52 +10,69 @@ struct HabitView: View {
     let icons = ["✅", "💪", "📚", "🏃", "💧", "🧘", "🎯", "💡", "🌟", "🔥"]
     
     var body: some View {
-        VStack(spacing: 30) {
-            // 标题
-            HStack {
-                Text("习惯打卡")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button(action: { showAddHabit = true }) {
-                    Label("添加习惯", systemImage: "plus")
+        AppPage(
+            title: "习惯积累",
+            subtitle: "小动作重复到足够多次，就会变成不用消耗意志力的自律系统。",
+            icon: "leaf",
+            actionTitle: "建立习惯",
+            actionIcon: "plus",
+            action: { showAddHabit = true }
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    MetricCard(
+                        title: "今日完成",
+                        value: "\(todayCompletedCount)/\(dataStore.habits.count)",
+                        caption: dataStore.habits.isEmpty ? "先建立一个微习惯" : "保持今天的闭环",
+                        icon: "checkmark.circle.fill",
+                        color: .green
+                    )
+                    
+                    MetricCard(
+                        title: "最长连续",
+                        value: "\(longestStreak) 天",
+                        caption: "连续性会降低启动成本",
+                        icon: "flame.fill",
+                        color: .orange
+                    )
+                    
+                    MetricCard(
+                        title: "完成率",
+                        value: "\(completionRate)%",
+                        caption: "今天的自律完成度",
+                        icon: "chart.pie.fill",
+                        color: .blue
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-            }
-            
-            // 今日打卡统计
-            HStack {
-                HabitStatCard(
-                    title: "今日打卡",
-                    value: "\(todayCompletedCount)/\(dataStore.habits.count)",
-                    icon: "checkmark.circle.fill",
-                    color: .green
-                )
                 
-                HabitStatCard(
-                    title: "连续天数",
-                    value: "\(currentStreak)",
-                    icon: "flame.fill",
-                    color: .orange
-                )
-            }
-            
-            // 习惯列表
-            List {
-                ForEach(dataStore.habits) { habit in
-                    HabitRow(habit: habit)
-                }
-                .onDelete { indexSet in
-                    indexSet.forEach { index in
-                        dataStore.deleteHabit(dataStore.habits[index])
+                List {
+                    ForEach(dataStore.habits) { habit in
+                        HabitRow(habit: habit)
+                    }
+                    .onDelete { indexSet in
+                        indexSet.forEach { index in
+                            dataStore.deleteHabit(dataStore.habits[index])
+                        }
                     }
                 }
+                .listStyle(.inset)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appStroke)
+                )
+                .overlay {
+                    if dataStore.habits.isEmpty {
+                        EmptyStateView(
+                            icon: "leaf",
+                            title: "还没有习惯",
+                            message: "先建立一个小到不会抗拒的习惯，让积累开始发生。"
+                        )
+                    }
+                }
+                .frame(minHeight: 360)
             }
-            .listStyle(.inset)
         }
-        .padding(40)
         .sheet(isPresented: $showAddHabit) {
             AddHabitSheet(
                 name: $newHabitName,
@@ -63,59 +80,45 @@ struct HabitView: View {
                 frequency: $newHabitFrequency,
                 icons: icons,
                 onSave: {
+                    let trimmedName = newHabitName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedName.isEmpty else { return }
+                    
                     let habit = Habit(
-                        name: newHabitName,
+                        name: trimmedName,
                         icon: newHabitIcon,
                         frequency: newHabitFrequency
                     )
                     dataStore.addHabit(habit)
-                    newHabitName = ""
-                    newHabitIcon = "✅"
-                    newHabitFrequency = .daily
+                    resetNewHabit()
                     showAddHabit = false
                 },
                 onCancel: {
+                    resetNewHabit()
                     showAddHabit = false
                 }
             )
         }
     }
     
+    private func resetNewHabit() {
+        newHabitName = ""
+        newHabitIcon = "✅"
+        newHabitFrequency = .daily
+    }
+    
     private var todayCompletedCount: Int {
         dataStore.habits.filter { habit in
-            habit.records.contains { record in
-                Calendar.current.isDateInToday(record.date) && record.isCompleted
-            }
+            habit.isCompleted()
         }.count
     }
     
-    private var currentStreak: Int {
-        // 计算所有习惯的最小连续天数
+    private var longestStreak: Int {
+        dataStore.habits.map { $0.currentStreak() }.max() ?? 0
+    }
+    
+    private var completionRate: Int {
         guard !dataStore.habits.isEmpty else { return 0 }
-        
-        var minStreak = Int.max
-        
-        for habit in dataStore.habits {
-            var streak = 0
-            var date = Date()
-            
-            while true {
-                let hasRecord = habit.records.contains { record in
-                    Calendar.current.isDate(record.date, inSameDayAs: date) && record.isCompleted
-                }
-                
-                if hasRecord {
-                    streak += 1
-                    date = Calendar.current.date(byAdding: .day, value: -1, to: date)!
-                } else {
-                    break
-                }
-            }
-            
-            minStreak = min(minStreak, streak)
-        }
-        
-        return minStreak == Int.max ? 0 : minStreak
+        return Int((Double(todayCompletedCount) / Double(dataStore.habits.count) * 100).rounded())
     }
 }
 
@@ -124,39 +127,21 @@ struct HabitRow: View {
     let habit: Habit
     
     var isCompletedToday: Bool {
-        habit.records.contains { record in
-            Calendar.current.isDateInToday(record.date) && record.isCompleted
-        }
+        habit.isCompleted()
     }
     
     var streak: Int {
-        var streak = 0
-        var date = Date()
-        
-        while true {
-            let hasRecord = habit.records.contains { record in
-                Calendar.current.isDate(record.date, inSameDayAs: date) && record.isCompleted
-            }
-            
-            if hasRecord {
-                streak += 1
-                date = Calendar.current.date(byAdding: .day, value: -1, to: date)!
-            } else {
-                break
-            }
-        }
-        
-        return streak
+        habit.currentStreak()
     }
     
     var body: some View {
-        HStack {
-            // 习惯图标
+        HStack(spacing: 14) {
             Text(habit.icon)
                 .font(.system(size: 32))
-                .frame(width: 50)
+                .frame(width: 52, height: 52)
+                .background(Color.appMutedAccent)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             
-            // 习惯信息
             VStack(alignment: .leading, spacing: 4) {
                 Text(habit.name)
                     .font(.headline)
@@ -167,7 +152,7 @@ struct HabitRow: View {
                         .foregroundColor(.secondary)
                     
                     if streak > 0 {
-                        Text("• \(streak)天连续")
+                        Text("• 连续 \(streak) 天")
                             .font(.caption)
                             .foregroundColor(.orange)
                     }
@@ -176,48 +161,16 @@ struct HabitRow: View {
             
             Spacer()
             
-            // 打卡按钮
             Button(action: {
-                if !isCompletedToday {
-                    dataStore.toggleHabit(habit)
-                }
+                dataStore.toggleHabit(habit)
             }) {
                 Image(systemName: isCompletedToday ? "checkmark.circle.fill" : "circle")
                     .font(.title)
                     .foregroundColor(isCompletedToday ? .green : .gray)
             }
             .buttonStyle(.plain)
-            .disabled(isCompletedToday)
         }
         .padding(.vertical, 8)
-    }
-}
-
-struct HabitStatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.title)
-                .foregroundColor(color)
-            
-            VStack(alignment: .leading) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-            }
-        }
-        .frame(width: 200)
-        .padding()
-        .background(color.opacity(0.1))
-        .cornerRadius(10)
     }
 }
 
@@ -231,14 +184,14 @@ struct AddHabitSheet: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            Text("添加新习惯")
+            Text("建立新习惯")
                 .font(.title2)
                 .fontWeight(.bold)
             
             VStack(alignment: .leading, spacing: 10) {
-                Text("习惯名称")
+                Text("习惯动作")
                     .font(.headline)
-                TextField("输入习惯名称...", text: $name)
+                TextField("例如：睡前复盘 5 分钟", text: $name)
                     .textFieldStyle(.roundedBorder)
             }
             
@@ -279,11 +232,10 @@ struct AddHabitSheet: View {
                 
                 Button("保存", action: onSave)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(name.isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(30)
         .frame(width: 400)
     }
 }
-

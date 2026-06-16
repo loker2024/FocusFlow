@@ -45,77 +45,123 @@ struct TaskListView: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
-            // 标题和添加按钮
-            HStack {
-                Text("任务管理")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button(action: { showAddTask = true }) {
-                    Label("添加任务", systemImage: "plus")
+        AppPage(
+            title: "行动清单",
+            subtitle: "把目标拆成今天能推进的一步，完成后就让它成为积累的一部分。",
+            icon: "checklist",
+            actionTitle: "添加行动",
+            actionIcon: "plus",
+            action: { showAddTask = true }
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    SearchField(text: $searchText)
+                    
+                    Picker("状态", selection: $filterStatus) {
+                        ForEach(TaskFilter.allCases, id: \.self) { filter in
+                            Text(filter.rawValue).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 210)
                 }
-                .buttonStyle(.borderedProminent)
-            }
-            
-            // 搜索和过滤
-            HStack {
-                SearchField(text: $searchText)
                 
-                Picker("状态", selection: $filterStatus) {
-                    ForEach(TaskFilter.allCases, id: \.self) { filter in
-                        Text(filter.rawValue).tag(filter)
+                HStack(spacing: 12) {
+                    MetricCard(
+                        title: "待推进",
+                        value: "\(pendingCount) 项",
+                        caption: "下一步越清楚，拖延越少",
+                        icon: "circle",
+                        color: .orange
+                    )
+                    MetricCard(
+                        title: "已兑现",
+                        value: "\(completedCount) 项",
+                        caption: "完成会沉淀成信心",
+                        icon: "checkmark.circle.fill",
+                        color: .green
+                    )
+                    MetricCard(
+                        title: "完成率",
+                        value: "\(completionRate)%",
+                        caption: dataStore.tasks.isEmpty ? "从第一项开始" : "保持稳定节奏",
+                        icon: "chart.line.uptrend.xyaxis",
+                        color: .blue
+                    )
+                }
+                
+                List {
+                    ForEach(filteredTasks) { task in
+                        TaskRow(task: task)
+                    }
+                    .onDelete { indexSet in
+                        indexSet.forEach { index in
+                            dataStore.deleteTask(filteredTasks[index])
+                        }
                     }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
-            }
-            
-            // 统计信息
-            HStack {
-                TaskStatBadge(title: "总任务", count: dataStore.tasks.count, color: .blue)
-                TaskStatBadge(title: "待办", count: dataStore.tasks.filter { !$0.isCompleted }.count, color: .orange)
-                TaskStatBadge(title: "已完成", count: dataStore.tasks.filter { $0.isCompleted }.count, color: .green)
-            }
-            
-            // 任务列表
-            List {
-                ForEach(filteredTasks) { task in
-                    TaskRow(task: task)
-                }
-                .onDelete { indexSet in
-                    indexSet.forEach { index in
-                        dataStore.deleteTask(filteredTasks[index])
+                .listStyle(.inset)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appStroke)
+                )
+                .overlay {
+                    if filteredTasks.isEmpty {
+                        EmptyStateView(
+                            icon: searchText.isEmpty ? "checklist" : "magnifyingglass",
+                            title: searchText.isEmpty ? "还没有行动项" : "没有匹配结果",
+                            message: searchText.isEmpty ? "先写下一个 15 分钟内能开始的动作。" : "换个关键词，或者回到全部状态再看。"
+                        )
                     }
                 }
+                .frame(minHeight: 340)
             }
-            .listStyle(.inset)
         }
-        .padding(40)
         .sheet(isPresented: $showAddTask) {
             AddTaskSheet(
                 title: $newTaskTitle,
                 description: $newTaskDescription,
                 priority: $newTaskPriority,
                 onSave: {
+                    let trimmedTitle = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedDescription = newTaskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedTitle.isEmpty else { return }
+                    
                     let task = TaskItem(
-                        title: newTaskTitle,
-                        description: newTaskDescription,
+                        title: trimmedTitle,
+                        description: trimmedDescription,
                         priority: newTaskPriority
                     )
                     dataStore.addTask(task)
-                    newTaskTitle = ""
-                    newTaskDescription = ""
-                    newTaskPriority = .medium
+                    resetNewTask()
                     showAddTask = false
                 },
                 onCancel: {
+                    resetNewTask()
                     showAddTask = false
                 }
             )
         }
+    }
+    
+    private func resetNewTask() {
+        newTaskTitle = ""
+        newTaskDescription = ""
+        newTaskPriority = .medium
+    }
+    
+    private var pendingCount: Int {
+        dataStore.tasks.filter { !$0.isCompleted }.count
+    }
+    
+    private var completedCount: Int {
+        dataStore.tasks.filter(\.isCompleted).count
+    }
+    
+    private var completionRate: Int {
+        guard !dataStore.tasks.isEmpty else { return 0 }
+        return Int((Double(completedCount) / Double(dataStore.tasks.count) * 100).rounded())
     }
 }
 
@@ -124,7 +170,7 @@ struct TaskRow: View {
     let task: TaskItem
     
     var body: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 12) {
             Button(action: {
                 dataStore.toggleTask(task)
             }) {
@@ -148,13 +194,7 @@ struct TaskRow: View {
                 }
                 
                 HStack {
-                    Text(task.priority.rawValue)
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(priorityColor(task.priority))
-                        .foregroundColor(.white)
-                        .cornerRadius(4)
+                    PillBadge(text: task.priority.rawValue, color: priorityColor(task.priority))
                     
                     Text(task.createdAt, style: .date)
                         .font(.caption)
@@ -164,7 +204,8 @@ struct TaskRow: View {
             
             Spacer()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
     
     private func priorityColor(_ priority: TaskItem.Priority) -> Color {
@@ -177,27 +218,6 @@ struct TaskRow: View {
     }
 }
 
-struct TaskStatBadge: View {
-    let title: String
-    let count: Int
-    let color: Color
-    
-    var body: some View {
-        VStack {
-            Text("\(count)")
-                .font(.title2)
-                .fontWeight(.bold)
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(width: 80)
-        .padding()
-        .background(color.opacity(0.1))
-        .cornerRadius(8)
-    }
-}
-
 struct SearchField: View {
     @Binding var text: String
     
@@ -205,7 +225,7 @@ struct SearchField: View {
         HStack {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
-            TextField("搜索任务...", text: $text)
+            TextField("搜索行动项...", text: $text)
                 .textFieldStyle(.plain)
             if !text.isEmpty {
                 Button(action: { text = "" }) {
@@ -216,8 +236,12 @@ struct SearchField: View {
             }
         }
         .padding(8)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(8)
+        .background(Color.appSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appStroke)
+        )
     }
 }
 
@@ -230,23 +254,25 @@ struct AddTaskSheet: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            Text("添加新任务")
+            Text("添加行动项")
                 .font(.title2)
                 .fontWeight(.bold)
             
             VStack(alignment: .leading, spacing: 10) {
-                Text("任务标题")
+                Text("下一步")
                     .font(.headline)
-                TextField("输入任务标题...", text: $title)
+                TextField("例如：完成一页复盘提纲", text: $title)
                     .textFieldStyle(.roundedBorder)
             }
             
             VStack(alignment: .leading, spacing: 10) {
-                Text("任务描述")
+                Text("补充说明")
                     .font(.headline)
-                TextEditor(text: $description)
-                    .frame(height: 100)
-                    .border(Color.gray.opacity(0.3))
+                PromptTextEditor(
+                    text: $description,
+                    prompt: "写下完成标准、上下文或可能的阻力。",
+                    minHeight: 110
+                )
             }
             
             VStack(alignment: .leading, spacing: 10) {
@@ -268,11 +294,10 @@ struct AddTaskSheet: View {
                 
                 Button("保存", action: onSave)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(title.isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(30)
         .frame(width: 400)
     }
 }
-

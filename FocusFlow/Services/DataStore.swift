@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 class DataStore: ObservableObject {
     static let shared = DataStore()
     
@@ -12,11 +13,12 @@ class DataStore: ObservableObject {
     @Published var goals: [Goal] = []
     @Published var countdownEvents: [CountdownEvent] = []
     
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         loadData()
     }
     
@@ -58,12 +60,17 @@ class DataStore: ObservableObject {
         save()
     }
     
-    func completePomodoroSession(_ session: PomodoroSession) {
+    func completePomodoroSession(_ session: PomodoroSession, endTime: Date = Date()) {
+        var completedSession = session
+        completedSession.endTime = endTime
+        completedSession.isCompleted = true
+        
         if let index = pomodoroSessions.firstIndex(where: { $0.id == session.id }) {
-            pomodoroSessions[index].endTime = Date()
-            pomodoroSessions[index].isCompleted = true
-            save()
+            pomodoroSessions[index] = completedSession
+        } else {
+            pomodoroSessions.append(completedSession)
         }
+        save()
     }
     
     // MARK: - 时间追踪操作
@@ -72,11 +79,16 @@ class DataStore: ObservableObject {
         save()
     }
     
-    func stopTimeEntry(_ entry: TimeEntry) {
+    func stopTimeEntry(_ entry: TimeEntry, endTime: Date = Date()) {
+        var stoppedEntry = entry
+        stoppedEntry.endTime = endTime
+        
         if let index = timeEntries.firstIndex(where: { $0.id == entry.id }) {
-            timeEntries[index].endTime = Date()
-            save()
+            timeEntries[index] = stoppedEntry
+        } else {
+            timeEntries.append(stoppedEntry)
         }
+        save()
     }
     
     // MARK: - 任务操作
@@ -99,8 +111,20 @@ class DataStore: ObservableObject {
     }
     
     // MARK: - 工作日志操作
+    func workLog(for date: Date, calendar: Calendar = .current) -> WorkLog? {
+        workLogs.first {
+            calendar.isDate($0.date, inSameDayAs: date)
+        }
+    }
+    
     func addWorkLog(_ log: WorkLog) {
-        workLogs.append(log)
+        if let index = workLogs.firstIndex(where: {
+            Calendar.current.isDate($0.date, inSameDayAs: log.date)
+        }) {
+            workLogs[index] = log
+        } else {
+            workLogs.append(log)
+        }
         save()
     }
     
@@ -112,8 +136,15 @@ class DataStore: ObservableObject {
     
     func toggleHabit(_ habit: Habit, date: Date = Date()) {
         if let index = habits.firstIndex(where: { $0.id == habit.id }) {
-            let record = HabitRecord(date: date, isCompleted: true)
-            habits[index].records.append(record)
+            if let recordIndex = habits[index].records.firstIndex(where: {
+                Calendar.current.isDate($0.date, inSameDayAs: date)
+            }) {
+                habits[index].records[recordIndex].isCompleted.toggle()
+                habits[index].records[recordIndex].date = date
+            } else {
+                let record = HabitRecord(date: date, isCompleted: true)
+                habits[index].records.append(record)
+            }
             save()
         }
     }
@@ -148,6 +179,12 @@ class DataStore: ObservableObject {
            let milestoneIndex = goals[goalIndex].milestones.firstIndex(where: { $0.id == milestone.id }) {
             goals[goalIndex].milestones[milestoneIndex].isCompleted.toggle()
             goals[goalIndex].milestones[milestoneIndex].completedAt = goals[goalIndex].milestones[milestoneIndex].isCompleted ? Date() : nil
+            
+            let milestones = goals[goalIndex].milestones
+            if !milestones.isEmpty {
+                let completedCount = milestones.filter(\.isCompleted).count
+                goals[goalIndex].progress = Double(completedCount) / Double(milestones.count) * 100
+            }
             save()
         }
     }
