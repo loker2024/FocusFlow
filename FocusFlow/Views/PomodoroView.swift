@@ -3,12 +3,12 @@ import SwiftUI
 struct PomodoroView: View {
     @EnvironmentObject var dataStore: DataStore
     @State private var timeRemaining: Int = 25 * 60
+    @State private var totalTime: Int = 25 * 60
     @State private var isRunning = false
     @State private var timer: Timer?
     @State private var currentSession: PomodoroSession?
     @State private var taskName: String = ""
     @State private var selectedDuration: Int = 25
-    @FocusState private var isTextFieldFocused: Bool
     
     let durations = [15, 25, 30, 45, 60]
     
@@ -21,7 +21,8 @@ struct PomodoroView: View {
     }
     
     var progress: Double {
-        Double(selectedDuration * 60 - timeRemaining) / Double(selectedDuration * 60)
+        guard totalTime > 0 else { return 0 }
+        return Double(totalTime - timeRemaining) / Double(totalTime)
     }
     
     var body: some View {
@@ -42,19 +43,22 @@ struct PomodoroView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 300)
-                .onChange(of: selectedDuration) { newValue in
+                .onChange(of: selectedDuration) { _, newValue in
                     if !isRunning {
                         timeRemaining = newValue * 60
+                        totalTime = newValue * 60
                     }
                 }
             }
             
             // 计时器显示
             ZStack {
+                // 背景圆环
                 Circle()
                     .stroke(Color.gray.opacity(0.2), lineWidth: 20)
                     .frame(width: 250, height: 250)
                 
+                // 进度圆环
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
@@ -63,8 +67,9 @@ struct PomodoroView: View {
                     )
                     .frame(width: 250, height: 250)
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: progress)
+                    .animation(.linear(duration: 0.5), value: progress)
                 
+                // 时间显示
                 VStack {
                     Text(String(format: "%02d:%02d", minutes, seconds))
                         .font(.system(size: 60, weight: .bold, design: .monospaced))
@@ -76,11 +81,14 @@ struct PomodoroView: View {
             }
             
             // 任务名称
-            HStack {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("任务名称")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
                 TextField("正在做什么...", text: $taskName)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 250)
-                    .focused($isTextFieldFocused)
+                    .disabled(isRunning)
             }
             
             // 控制按钮
@@ -99,6 +107,7 @@ struct PomodoroView: View {
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
+                .buttonStyle(.plain)
                 
                 Button(action: resetTimer) {
                     Label("重置", systemImage: "arrow.counterclockwise")
@@ -108,6 +117,7 @@ struct PomodoroView: View {
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
+                .buttonStyle(.plain)
             }
             
             // 今日统计
@@ -146,10 +156,12 @@ struct PomodoroView: View {
         
         isRunning = true
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            if timeRemaining > 0 {
-                timeRemaining -= 1
-            } else {
-                completeSession()
+            DispatchQueue.main.async {
+                if timeRemaining > 0 {
+                    timeRemaining -= 1
+                } else {
+                    completeSession()
+                }
             }
         }
     }
@@ -157,11 +169,13 @@ struct PomodoroView: View {
     private func pauseTimer() {
         isRunning = false
         timer?.invalidate()
+        timer = nil
     }
     
     private func resetTimer() {
         pauseTimer()
         timeRemaining = selectedDuration * 60
+        totalTime = selectedDuration * 60
         currentSession = nil
     }
     
@@ -177,13 +191,8 @@ struct PomodoroView: View {
         // 播放提示音
         NSSound.beep()
         
-        // 显示通知
-        let notification = NSUserNotification()
-        notification.title = "番茄钟完成！"
-        notification.informativeText = "太棒了！休息一下吧 🎉"
-        NSUserNotificationCenter.default.deliver(notification)
-        
         timeRemaining = selectedDuration * 60
+        totalTime = selectedDuration * 60
     }
 }
 
@@ -215,4 +224,3 @@ struct StatCard: View {
         .shadow(radius: 2)
     }
 }
-
