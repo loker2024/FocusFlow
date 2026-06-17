@@ -14,7 +14,10 @@ let package = Package(
             name: "FocusFlow",
             dependencies: [],
             path: "FocusFlow",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist"],
+            resources: [
+                .copy("Resources")
+            ]
         )
     ]
 )

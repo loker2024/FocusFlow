@@ -72,5 +72,12 @@
 - 更新 `.gitignore`，忽略 SwiftPM 和 macOS 常见生成文件
 
 ## 待完成
-- 应用图标和资源
-- 接入标准单元测试框架或 CI（当前已有轻量检查脚本）
+- 数据导出、备份与恢复
+- 今日总览页：聚合进行中的计时、任务、习惯、目标和关键日期
+
+## 今日收口
+- 增加可复现的应用图标生成脚本 `Scripts/generate_app_icon.py`
+- 生成并接入 `FocusFlow/Resources/FocusFlow.icns`
+- 打包脚本会复制应用图标并写入 `CFBundleIconFile`
+- `build_app.sh` 转调 `Scripts/package_dmg.sh`，保持打包入口一致
+- 增加 GitHub Actions CI，自动执行 `swift build` 和轻量检查脚本

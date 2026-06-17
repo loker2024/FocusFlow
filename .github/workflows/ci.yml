@@ -1,0 +1,33 @@
+name: FocusFlow CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  build-and-check:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Verify app icon resource
+        run: test -f FocusFlow/Resources/FocusFlow.icns
+
+      - name: Build
+        run: swift build
+
+      - name: Run lightweight checks
+        run: |
+          swiftc -parse-as-library \
+            FocusFlow/Models/Models.swift \
+            FocusFlow/Services/DataStore.swift \
+            Scripts/check_focusflow.swift \
+            -o /tmp/focusflow-checks
+
+          /tmp/focusflow-checks
