@@ -6,10 +6,9 @@ class DataStore: ObservableObject {
     static let shared = DataStore()
 
     @Published var pomodoroSessions: [PomodoroSession] = []
-    @Published var timeEntries: [TimeEntry] = []
     @Published var tasks: [TaskItem] = []
+    @Published var taskGroups: [TaskGroup] = []
     @Published var workLogs: [WorkLog] = []
-    @Published var habits: [Habit] = []
     @Published var goals: [Goal] = []
     @Published var countdownEvents: [CountdownEvent] = []
 
@@ -25,10 +24,9 @@ class DataStore: ObservableObject {
     // MARK: - 数据加载
     private func loadData() {
         pomodoroSessions = load(forKey: "pomodoroSessions") ?? []
-        timeEntries = load(forKey: "timeEntries") ?? []
         tasks = load(forKey: "tasks") ?? []
+        taskGroups = load(forKey: "taskGroups") ?? []
         workLogs = load(forKey: "workLogs") ?? []
-        habits = load(forKey: "habits") ?? []
         goals = load(forKey: "goals") ?? []
         countdownEvents = load(forKey: "countdownEvents") ?? []
     }
@@ -69,24 +67,6 @@ class DataStore: ObservableObject {
         saveKey(pomodoroSessions, forKey: "pomodoroSessions")
     }
 
-    // MARK: - 时间追踪操作
-    func addTimeEntry(_ entry: TimeEntry) {
-        timeEntries.append(entry)
-        saveKey(timeEntries, forKey: "timeEntries")
-    }
-
-    func stopTimeEntry(_ entry: TimeEntry, endTime: Date = Date()) {
-        var stoppedEntry = entry
-        stoppedEntry.endTime = endTime
-
-        if let index = timeEntries.firstIndex(where: { $0.id == entry.id }) {
-            timeEntries[index] = stoppedEntry
-        } else {
-            timeEntries.append(stoppedEntry)
-        }
-        saveKey(timeEntries, forKey: "timeEntries")
-    }
-
     // MARK: - 任务操作
     func addTask(_ task: TaskItem) {
         tasks.append(task)
@@ -106,6 +86,48 @@ class DataStore: ObservableObject {
         saveKey(tasks, forKey: "tasks")
     }
 
+    func addTaskGroup(_ group: TaskGroup) {
+        taskGroups.append(group)
+        saveKey(taskGroups, forKey: "taskGroups")
+    }
+
+    func deleteTaskGroup(_ group: TaskGroup) {
+        taskGroups.removeAll { $0.id == group.id }
+
+        for index in tasks.indices where tasks[index].groupID == group.id {
+            tasks[index].groupID = nil
+        }
+
+        saveKey(taskGroups, forKey: "taskGroups")
+        saveKey(tasks, forKey: "tasks")
+    }
+
+    func completedPomodoroSessions(for task: TaskItem) -> [PomodoroSession] {
+        pomodoroSessions.filter {
+            $0.taskID == task.id && $0.isCompleted
+        }
+    }
+
+    func completedPomodoroSessions(
+        on date: Date,
+        calendar: Calendar = .current
+    ) -> [PomodoroSession] {
+        pomodoroSessions.filter {
+            $0.isCompleted && calendar.isDate($0.startTime, inSameDayAs: date)
+        }
+    }
+
+    func focusSeconds(on date: Date, calendar: Calendar = .current) -> Int {
+        completedPomodoroSessions(on: date, calendar: calendar)
+            .reduce(0) { $0 + $1.effectiveDurationSeconds }
+    }
+
+    func focusMinutes(for task: TaskItem) -> Int {
+        let seconds = completedPomodoroSessions(for: task)
+            .reduce(0) { $0 + $1.effectiveDurationSeconds }
+        return Int(ceil(Double(seconds) / 60))
+    }
+
     // MARK: - 工作日志操作
     func workLog(for date: Date, calendar: Calendar = .current) -> WorkLog? {
         workLogs.first {
@@ -122,32 +144,6 @@ class DataStore: ObservableObject {
             workLogs.append(log)
         }
         saveKey(workLogs, forKey: "workLogs")
-    }
-
-    // MARK: - 打卡操作
-    func addHabit(_ habit: Habit) {
-        habits.append(habit)
-        saveKey(habits, forKey: "habits")
-    }
-
-    func toggleHabit(_ habit: Habit, date: Date = Date()) {
-        if let index = habits.firstIndex(where: { $0.id == habit.id }) {
-            if let recordIndex = habits[index].records.firstIndex(where: {
-                Calendar.current.isDate($0.date, inSameDayAs: date)
-            }) {
-                habits[index].records[recordIndex].isCompleted.toggle()
-                habits[index].records[recordIndex].date = date
-            } else {
-                let record = HabitRecord(date: date, isCompleted: true)
-                habits[index].records.append(record)
-            }
-            saveKey(habits, forKey: "habits")
-        }
-    }
-
-    func deleteHabit(_ habit: Habit) {
-        habits.removeAll { $0.id == habit.id }
-        saveKey(habits, forKey: "habits")
     }
 
     // MARK: - 目标操作

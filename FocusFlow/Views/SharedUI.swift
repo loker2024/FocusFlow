@@ -203,11 +203,11 @@ struct MetricCard: View {
 }
 
 struct SectionPanel<Content: View>: View {
-    let title: String
+    let title: String?
     let subtitle: String?
     @ViewBuilder let content: Content
 
-    init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+    init(title: String? = nil, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.subtitle = subtitle
         self.content = content()
@@ -215,14 +215,18 @@ struct SectionPanel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
+            if title != nil || subtitle != nil {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let title {
+                        Text(title)
+                            .font(.headline)
+                    }
 
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 

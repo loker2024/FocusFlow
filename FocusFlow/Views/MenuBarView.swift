@@ -3,7 +3,6 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var dataStore: DataStore
     @EnvironmentObject var pomodoroTimer: PomodoroTimerController
-    @EnvironmentObject var timeTracker: TimeTrackerController
     @Environment(\.openWindow) private var openWindow
     @State private var quickTaskTitle = ""
 
@@ -25,7 +24,7 @@ struct MenuBarView: View {
             }
             .padding(.horizontal)
 
-            if pomodoroTimer.currentSession != nil || timeTracker.isTracking {
+            if pomodoroTimer.currentSession != nil {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -43,14 +42,6 @@ struct MenuBarView: View {
                         )
                     }
 
-                    if timeTracker.isTracking {
-                        MenuStatusRow(
-                            icon: "record.circle",
-                            title: timeTracker.selectedCategory,
-                            detail: timeString(from: timeTracker.elapsedTime),
-                            color: .green
-                        )
-                    }
                 }
             }
 
@@ -74,11 +65,11 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .keyboardShortcut("p", modifiers: .command)
 
-                // 快速添加任务
+                // 快速添加待办
                 HStack {
                     Image(systemName: "plus.circle")
                         .foregroundColor(.blue)
-                    TextField("写下一个下一步...", text: $quickTaskTitle)
+                    TextField("快速添加待办...", text: $quickTaskTitle)
                         .textFieldStyle(.plain)
                         .onSubmit {
                             addQuickTask()
@@ -109,13 +100,6 @@ struct MenuBarView: View {
                         value: "\(todayCompletedTasks)",
                         label: "完成",
                         color: .blue
-                    )
-
-                    MenuStatItem(
-                        icon: "star",
-                        value: "\(todayHabitCount)",
-                        label: "习惯",
-                        color: .orange
                     )
                 }
                 .padding(.horizontal)
@@ -196,10 +180,6 @@ struct MenuBarView: View {
         }.count
     }
 
-    private var todayHabitCount: Int {
-        dataStore.habits.filter { $0.isCompleted() }.count
-    }
-
     private var upcomingEvents: [CountdownEvent] {
         dataStore.countdownEvents
             .filter { $0.daysRemaining >= 0 }
@@ -221,12 +201,6 @@ struct MenuBarView: View {
         quickTaskTitle = ""
     }
 
-    private func timeString(from timeInterval: TimeInterval) -> String {
-        let hours = Int(timeInterval) / 3600
-        let minutes = Int(timeInterval) % 3600 / 60
-        let seconds = Int(timeInterval) % 60
-        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, seconds) : String(format: "%02d:%02d", minutes, seconds)
-    }
 }
 
 struct MenuStatItem: View {

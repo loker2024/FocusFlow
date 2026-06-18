@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct WorkLogView: View {
@@ -68,6 +69,12 @@ struct WorkLogView: View {
                             }
                         }
                     }
+
+                    FocusReviewChart(
+                        date: selectedDate,
+                        sessions: dataStore.completedPomodoroSessions(on: selectedDate),
+                        tasks: dataStore.tasks
+                    )
 
                     SectionPanel(title: "今日沉淀", subtitle: "建议写下：完成了什么、卡在哪里、明天先做哪一步。") {
                         PromptTextEditor(
@@ -142,6 +149,173 @@ struct WorkLogView: View {
             selectedMood = "😊"
             productivity = 3
         }
+    }
+}
+
+private struct FocusReviewSlice: Identifiable {
+    let id: String
+    let title: String
+    let seconds: Int
+}
+
+private struct FocusReviewChart: View {
+    let date: Date
+    let sessions: [PomodoroSession]
+    let tasks: [TaskItem]
+
+    private let palette: [Color] = [
+        .blue,
+        .green,
+        .orange,
+        .purple,
+        .pink,
+        .teal,
+        .indigo,
+        .cyan
+    ]
+
+    var body: some View {
+        SectionPanel(
+            title: "当日专注分布",
+            subtitle: "按关联待办汇总当前复盘日期的完整专注记录。"
+        ) {
+            if slices.isEmpty {
+                EmptyStateView(
+                    icon: "chart.pie",
+                    title: "这一天还没有专注记录",
+                    message: "完成一次专注后，这里会显示时间投入的分布。"
+                )
+                .frame(maxWidth: .infinity, minHeight: 210)
+            } else {
+                HStack(spacing: 28) {
+                    Chart(Array(slices.enumerated()), id: \.element.id) { index, slice in
+                        SectorMark(
+                            angle: .value("专注秒数", slice.seconds),
+                            innerRadius: .ratio(0.56),
+                            angularInset: 1.5
+                        )
+                        .foregroundStyle(color(for: index).gradient)
+                        .cornerRadius(4)
+                    }
+                    .chartBackground { proxy in
+                        GeometryReader { geometry in
+                            if let frame = proxy.plotFrame {
+                                let plotFrame = geometry[frame]
+                                VStack(spacing: 3) {
+                                    Text(totalDurationText)
+                                        .font(.title2.weight(.bold))
+                                    Text("专注总时长")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .position(x: plotFrame.midX, y: plotFrame.midY)
+                            }
+                        }
+                    }
+                    .frame(width: 240, height: 220)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(date, format: .dateTime.year().month().day())
+                                .font(.headline)
+
+                            Spacer()
+
+                            PillBadge(
+                                text: "\(sessions.count) 次专注",
+                                color: .blue
+                            )
+                        }
+
+                        Divider()
+
+                        ForEach(Array(slices.enumerated()), id: \.element.id) { index, slice in
+                            HStack(spacing: 9) {
+                                Circle()
+                                    .fill(color(for: index))
+                                    .frame(width: 9, height: 9)
+
+                                Text(slice.title)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Text(durationText(seconds: slice.seconds))
+                                    .font(.subheadline.weight(.semibold))
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var slices: [FocusReviewSlice] {
+        var totals: [String: (title: String, seconds: Int)] = [:]
+
+        for session in sessions {
+            let key: String
+            let title: String
+
+            if let taskID = session.taskID {
+                key = "task-\(taskID.uuidString)"
+                title = tasks.first { $0.id == taskID }?.title
+                    ?? nonEmpty(session.taskName)
+                    ?? "已删除待办"
+            } else if let sessionName = nonEmpty(session.taskName) {
+                key = "name-\(sessionName)"
+                title = sessionName
+            } else {
+                key = "unlinked"
+                title = "未关联待办"
+            }
+
+            let current = totals[key]?.seconds ?? 0
+            totals[key] = (title, current + session.effectiveDurationSeconds)
+        }
+
+        return totals.map { key, value in
+            FocusReviewSlice(id: key, title: value.title, seconds: value.seconds)
+        }
+        .sorted { lhs, rhs in
+            if lhs.seconds == rhs.seconds {
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            }
+            return lhs.seconds > rhs.seconds
+        }
+    }
+
+    private var totalDurationText: String {
+        durationText(seconds: sessions.reduce(0) { $0 + $1.effectiveDurationSeconds })
+    }
+
+    private func color(for index: Int) -> Color {
+        palette[index % palette.count]
+    }
+
+    private func durationText(seconds: Int) -> String {
+        if seconds < 60 {
+            return "\(seconds) 秒"
+        }
+
+        let minutes = Int(ceil(Double(seconds) / 60))
+        let hours = minutes / 60
+        let remainder = minutes % 60
+
+        if hours > 0 {
+            return remainder == 0 ? "\(hours) 小时" : "\(hours)小时\(remainder)分"
+        }
+
+        return "\(minutes) 分钟"
+    }
+
+    private func nonEmpty(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

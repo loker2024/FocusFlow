@@ -29,12 +29,16 @@ struct FocusFlowChecks {
         try checkYearlyCountdownUsesNextUpcomingOccurrence()
         try checkYearlyCountdownRollsPastDatesIntoNextYear()
         try checkOneOffCountdownCanReportPastEvents()
-        try checkHabitCompletionAndCurrentStreakUseCalendarDays()
-        try checkHabitWeeklyAndMonthlyStreakUseFrequencyPeriods()
         try checkGoalProgressIsClamped()
         try checkCompletingPomodoroSessionStoresAndPersistsSession()
+        try checkPomodoroSessionsStayLinkedToTasks()
+        try checkActualFocusSecondsDriveTaskTotals()
+        try checkDailyFocusTotalsUseSelectedCalendarDate()
+        try checkFocusTimerDirectionsAndCustomDuration()
+        try checkDeletingTaskGroupKeepsTasksAsUngrouped()
+        try checkDeletingTaskPreservesFocusHistory()
+        try checkLegacyTaskAndPomodoroDataStillDecode()
         try checkWorkLogForSameDayIsReplaced()
-        try checkHabitToggleReusesRecordForSameDay()
     }
 
     private static func checkYearlyCountdownUsesNextUpcomingOccurrence() throws {
@@ -82,61 +86,6 @@ struct FocusFlowChecks {
         )
     }
 
-    private static func checkHabitCompletionAndCurrentStreakUseCalendarDays() throws {
-        let today = date(year: 2026, month: 6, day: 16)
-        var habit = Habit(name: "Read")
-        habit.records = [
-            HabitRecord(date: today),
-            HabitRecord(date: date(year: 2026, month: 6, day: 15)),
-            HabitRecord(date: date(year: 2026, month: 6, day: 14)),
-            HabitRecord(date: date(year: 2026, month: 6, day: 13), isCompleted: false)
-        ]
-
-        try expect(
-            habit.isCompleted(on: today, calendar: calendar),
-            "habit should be completed on a day with a completed record"
-        )
-        try expect(
-            habit.currentStreak(endingAt: today, calendar: calendar) == 3,
-            "habit streak should stop at the first missing or incomplete day"
-        )
-    }
-
-    private static func checkHabitWeeklyAndMonthlyStreakUseFrequencyPeriods() throws {
-        let today = date(year: 2026, month: 6, day: 16)
-        var weeklyHabit = Habit(name: "Review", frequency: .weekly)
-        weeklyHabit.records = [
-            HabitRecord(date: today),
-            HabitRecord(date: date(year: 2026, month: 6, day: 9)),
-            HabitRecord(date: date(year: 2026, month: 5, day: 26))
-        ]
-
-        try expect(
-            weeklyHabit.currentStreak(endingAt: today, calendar: calendar) == 2,
-            "weekly habit streak should count completed weeks and stop at the first missing week"
-        )
-        try expect(
-            weeklyHabit.frequency.streakUnit == "周",
-            "weekly habit streak unit should be weeks"
-        )
-
-        var monthlyHabit = Habit(name: "Plan", frequency: .monthly)
-        monthlyHabit.records = [
-            HabitRecord(date: today),
-            HabitRecord(date: date(year: 2026, month: 5, day: 1)),
-            HabitRecord(date: date(year: 2026, month: 3, day: 1))
-        ]
-
-        try expect(
-            monthlyHabit.currentStreak(endingAt: today, calendar: calendar) == 2,
-            "monthly habit streak should count completed months and stop at the first missing month"
-        )
-        try expect(
-            monthlyHabit.frequency.streakUnit == "月",
-            "monthly habit streak unit should be months"
-        )
-    }
-
     @MainActor
     private static func checkGoalProgressIsClamped() throws {
         var goal = Goal(title: "Ship", targetDate: date(year: 2026, month: 7, day: 1), progress: 150)
@@ -170,6 +119,190 @@ struct FocusFlowChecks {
     }
 
     @MainActor
+    private static func checkPomodoroSessionsStayLinkedToTasks() throws {
+        let store = DataStore(defaults: makeDefaults())
+        let task = TaskItem(title: "Write report")
+        store.addTask(task)
+
+        let linkedSession = PomodoroSession(duration: 25, taskName: task.title, taskID: task.id)
+        store.completePomodoroSession(linkedSession)
+        store.completePomodoroSession(PomodoroSession(duration: 45, taskName: "Other"))
+
+        try expect(
+            store.completedPomodoroSessions(for: task).count == 1,
+            "task focus count should only include sessions linked by task id"
+        )
+        try expect(
+            store.focusMinutes(for: task) == 25,
+            "task focus duration should sum linked completed sessions"
+        )
+    }
+
+    @MainActor
+    private static func checkActualFocusSecondsDriveTaskTotals() throws {
+        let store = DataStore(defaults: makeDefaults())
+        let task = TaskItem(title: "Short focus")
+        store.addTask(task)
+        store.completePomodoroSession(
+            PomodoroSession(
+                duration: 1,
+                durationSeconds: 75,
+                taskName: task.title,
+                taskID: task.id
+            )
+        )
+
+        try expect(
+            store.focusMinutes(for: task) == 2,
+            "task focus totals should use actual seconds and round partial minutes up"
+        )
+    }
+
+    @MainActor
+    private static func checkDailyFocusTotalsUseSelectedCalendarDate() throws {
+        let store = DataStore(defaults: makeDefaults())
+        let selectedDate = date(year: 2026, month: 6, day: 18)
+        let nextDate = date(year: 2026, month: 6, day: 19)
+
+        store.completePomodoroSession(
+            PomodoroSession(
+                startTime: selectedDate,
+                duration: 1,
+                durationSeconds: 75,
+                taskName: "Review"
+            )
+        )
+        store.completePomodoroSession(
+            PomodoroSession(
+                startTime: nextDate,
+                duration: 25,
+                taskName: "Tomorrow"
+            )
+        )
+
+        try expect(
+            store.completedPomodoroSessions(on: selectedDate, calendar: calendar).count == 1,
+            "daily focus sessions should only include the selected calendar date"
+        )
+        try expect(
+            store.focusSeconds(on: selectedDate, calendar: calendar) == 75,
+            "daily focus total should use actual recorded seconds"
+        )
+    }
+
+    @MainActor
+    private static func checkFocusTimerDirectionsAndCustomDuration() throws {
+        let controller = PomodoroTimerController(dataStore: DataStore(defaults: makeDefaults()))
+
+        controller.direction = .countUp
+        try expect(controller.displayedSeconds == 0, "count-up focus should begin at zero")
+        controller.start()
+        controller.tick()
+        controller.pause()
+        try expect(controller.displayedSeconds == 1, "count-up focus should increase each second")
+
+        controller.reset()
+        controller.direction = .countDown
+        controller.selectedDuration = 37
+        try expect(controller.displayedSeconds == 37 * 60, "countdown should accept a custom minute value")
+        controller.start()
+        controller.tick()
+        controller.pause()
+        try expect(controller.displayedSeconds == 37 * 60 - 1, "countdown focus should decrease each second")
+        controller.reset()
+    }
+
+    @MainActor
+    private static func checkDeletingTaskGroupKeepsTasksAsUngrouped() throws {
+        let defaults = makeDefaults()
+        let store = DataStore(defaults: defaults)
+        let group = TaskGroup(name: "Course")
+
+        store.addTaskGroup(group)
+        store.addTask(TaskItem(title: "Review notes", groupID: group.id))
+        store.deleteTaskGroup(group)
+
+        try expect(store.taskGroups.isEmpty, "deleted task group should be removed")
+        try expect(store.tasks[0].groupID == nil, "tasks in a deleted group should become ungrouped")
+
+        let reloadedStore = DataStore(defaults: defaults)
+        try expect(reloadedStore.tasks[0].groupID == nil, "ungrouped task state should persist")
+    }
+
+    @MainActor
+    private static func checkDeletingTaskPreservesFocusHistory() throws {
+        let defaults = makeDefaults()
+        let store = DataStore(defaults: defaults)
+        let task = TaskItem(title: "Temporary task")
+
+        store.addTask(task)
+        store.completePomodoroSession(
+            PomodoroSession(duration: 25, taskName: task.title, taskID: task.id)
+        )
+        store.deleteTask(task)
+
+        try expect(store.tasks.isEmpty, "deleted task should be removed")
+        try expect(store.pomodoroSessions.count == 1, "deleting a task should preserve focus history")
+        try expect(store.pomodoroSessions[0].taskID == task.id, "preserved focus history should keep its original task id")
+
+        let reloadedStore = DataStore(defaults: defaults)
+        try expect(reloadedStore.tasks.isEmpty, "task deletion should persist")
+        try expect(reloadedStore.pomodoroSessions.count == 1, "preserved focus history should persist")
+    }
+
+    private static func checkLegacyTaskAndPomodoroDataStillDecode() throws {
+        struct LegacyTaskItem: Encodable {
+            let id: UUID
+            let title: String
+            let taskDescription: String
+            let priority: TaskItem.Priority
+            let isCompleted: Bool
+            let createdAt: Date
+            let completedAt: Date?
+            let dueDate: Date?
+            let tags: [String]
+        }
+
+        struct LegacyPomodoroSession: Encodable {
+            let id: UUID
+            let startTime: Date
+            let endTime: Date?
+            let duration: Int
+            let taskName: String
+            let isCompleted: Bool
+        }
+
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let legacyTask = LegacyTaskItem(
+            id: UUID(),
+            title: "Old task",
+            taskDescription: "",
+            priority: .medium,
+            isCompleted: false,
+            createdAt: Date(),
+            completedAt: nil,
+            dueDate: nil,
+            tags: []
+        )
+        let legacySession = LegacyPomodoroSession(
+            id: UUID(),
+            startTime: Date(),
+            endTime: nil,
+            duration: 25,
+            taskName: "Old focus",
+            isCompleted: true
+        )
+
+        let decodedTask = try decoder.decode(TaskItem.self, from: encoder.encode(legacyTask))
+        let decodedSession = try decoder.decode(PomodoroSession.self, from: encoder.encode(legacySession))
+
+        try expect(decodedTask.groupID == nil, "legacy tasks should decode as ungrouped")
+        try expect(decodedSession.taskID == nil, "legacy pomodoro sessions should decode without task links")
+        try expect(decodedSession.durationSeconds == nil, "legacy pomodoro sessions should decode without actual seconds")
+    }
+
+    @MainActor
     private static func checkWorkLogForSameDayIsReplaced() throws {
         let store = DataStore(defaults: makeDefaults())
         let morning = date(year: 2026, month: 6, day: 16)
@@ -181,21 +314,6 @@ struct FocusFlowChecks {
         try expect(store.workLogs.count == 1, "same-day work log should be replaced")
         try expect(store.workLog(for: morning, calendar: calendar)?.content == "Final", "latest same-day work log should be returned")
         try expect(store.workLog(for: morning, calendar: calendar)?.productivity == 5, "replacement work log should keep productivity")
-    }
-
-    @MainActor
-    private static func checkHabitToggleReusesRecordForSameDay() throws {
-        let store = DataStore(defaults: makeDefaults())
-        let morning = date(year: 2026, month: 6, day: 16)
-        let afternoon = calendar.date(byAdding: .hour, value: 14, to: morning)!
-        let habit = Habit(name: "Stretch")
-
-        store.addHabit(habit)
-        store.toggleHabit(store.habits[0], date: morning)
-        store.toggleHabit(store.habits[0], date: afternoon)
-
-        try expect(store.habits[0].records.count == 1, "same-day habit toggles should reuse the record")
-        try expect(!store.habits[0].records[0].isCompleted, "second same-day habit toggle should mark incomplete")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

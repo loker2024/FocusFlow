@@ -2,16 +2,36 @@ import AppKit
 import Combine
 import Foundation
 
+enum FocusTimerDirection: String, CaseIterable {
+    case countUp = "正向"
+    case countDown = "反向"
+}
+
 @MainActor
 final class PomodoroTimerController: ObservableObject {
-    @Published var timeRemaining: Int
+    @Published var displayedSeconds: Int
     @Published var totalTime: Int
     @Published var isRunning = false
     @Published var currentSession: PomodoroSession?
     @Published var taskName = ""
+    @Published var selectedTaskID: UUID?
+    @Published var direction: FocusTimerDirection = .countDown {
+        didSet {
+            guard currentSession == nil else { return }
+            resetClock()
+        }
+    }
     @Published var selectedDuration: Int {
         didSet {
             guard currentSession == nil else { return }
+            if selectedDuration < 1 {
+                selectedDuration = 1
+                return
+            }
+            if selectedDuration > 720 {
+                selectedDuration = 720
+                return
+            }
             resetClock()
         }
     }
@@ -24,30 +44,44 @@ final class PomodoroTimerController: ObservableObject {
     init(dataStore: DataStore, selectedDuration: Int = 25) {
         self.dataStore = dataStore
         self.selectedDuration = selectedDuration
-        self.timeRemaining = selectedDuration * 60
+        self.displayedSeconds = selectedDuration * 60
         self.totalTime = selectedDuration * 60
     }
 
     var isPaused: Bool {
-        currentSession != nil && !isRunning && timeRemaining < totalTime
+        currentSession != nil && !isRunning && elapsedSeconds > 0
     }
 
     var minutes: Int {
-        timeRemaining / 60
+        displayedSeconds / 60
     }
 
     var seconds: Int {
-        timeRemaining % 60
+        displayedSeconds % 60
+    }
+
+    var elapsedSeconds: Int {
+        switch direction {
+        case .countUp:
+            return displayedSeconds
+        case .countDown:
+            return max(0, totalTime - displayedSeconds)
+        }
     }
 
     var progress: Double {
-        guard totalTime > 0 else { return 0 }
-        return Double(totalTime - timeRemaining) / Double(totalTime)
+        switch direction {
+        case .countUp:
+            return Double(displayedSeconds % 60) / 60
+        case .countDown:
+            guard totalTime > 0 else { return 0 }
+            return Double(totalTime - displayedSeconds) / Double(totalTime)
+        }
     }
 
     var statusText: String {
         if isRunning {
-            return "沉浸中"
+            return direction == .countUp ? "正向计时中" : "反向计时中"
         }
 
         if isPaused {
@@ -62,8 +96,10 @@ final class PomodoroTimerController: ObservableObject {
 
         if currentSession == nil {
             currentSession = PomodoroSession(
-                duration: selectedDuration,
-                taskName: taskName.trimmingCharacters(in: .whitespacesAndNewlines)
+                duration: direction == .countDown ? selectedDuration : 0,
+                durationSeconds: nil,
+                taskName: taskName.trimmingCharacters(in: .whitespacesAndNewlines),
+                taskID: selectedTaskID
             )
         }
 
@@ -87,10 +123,19 @@ final class PomodoroTimerController: ObservableObject {
         resetClock()
     }
 
+    func selectTask(_ task: TaskItem?) {
+        guard currentSession == nil else { return }
+        selectedTaskID = task?.id
+        taskName = task?.title ?? ""
+    }
+
     func complete() {
         pause()
 
-        if let session = currentSession {
+        if var session = currentSession {
+            let actualSeconds = max(1, elapsedSeconds)
+            session.durationSeconds = actualSeconds
+            session.duration = Int(ceil(Double(actualSeconds) / 60))
             dataStore.completePomodoroSession(session)
             currentSession = nil
             NSSound.beep()
@@ -99,97 +144,31 @@ final class PomodoroTimerController: ObservableObject {
         resetClock()
     }
 
-    private func tick() {
+    func tick() {
         guard isRunning else { return }
 
-        if timeRemaining > 0 {
-            timeRemaining -= 1
-        }
+        switch direction {
+        case .countUp:
+            displayedSeconds += 1
+        case .countDown:
+            if displayedSeconds > 0 {
+                displayedSeconds -= 1
+            }
 
-        if timeRemaining <= 0 {
-            complete()
-        }
-    }
-
-    private func resetClock() {
-        timeRemaining = selectedDuration * 60
-        totalTime = selectedDuration * 60
-    }
-}
-
-@MainActor
-final class TimeTrackerController: ObservableObject {
-    @Published var isTracking = false
-    @Published var currentEntry: TimeEntry?
-    @Published var selectedCategory = "深度工作"
-    @Published var project = ""
-    @Published var note = ""
-    @Published var elapsedTime: TimeInterval = 0
-
-    let categories = ["深度工作", "学习输入", "阅读沉淀", "训练健康", "恢复休息", "日常事务", "其他"]
-
-    private let dataStore: DataStore
-    private var timer: Timer?
-
-    init(dataStore: DataStore) {
-        self.dataStore = dataStore
-    }
-
-    var statusText: String {
-        isTracking ? "正在记录" : "等待开始"
-    }
-
-    func start() {
-        guard !isTracking else { return }
-
-        timer?.invalidate()
-
-        let entry = TimeEntry(
-            category: selectedCategory,
-            project: project.trimmingCharacters(in: .whitespacesAndNewlines),
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-
-        currentEntry = entry
-        elapsedTime = 0
-        isTracking = true
-        dataStore.addTimeEntry(entry)
-
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.tick()
+            if displayedSeconds <= 0 {
+                complete()
             }
         }
     }
 
-    func stop() {
-        let entry = currentEntry
-        stopTimer()
-
-        if let entry {
-            dataStore.stopTimeEntry(entry)
+    private func resetClock() {
+        switch direction {
+        case .countUp:
+            displayedSeconds = 0
+            totalTime = 0
+        case .countDown:
+            displayedSeconds = selectedDuration * 60
+            totalTime = selectedDuration * 60
         }
-
-        currentEntry = nil
-        project = ""
-        note = ""
-        elapsedTime = 0
-    }
-
-    func reset() {
-        guard !isTracking else { return }
-        currentEntry = nil
-        elapsedTime = 0
-    }
-
-    private func tick() {
-        guard isTracking, let currentEntry else { return }
-        elapsedTime = Date().timeIntervalSince(currentEntry.startTime)
-    }
-
-    private func stopTimer() {
-        isTracking = false
-        timer?.invalidate()
-        timer = nil
     }
 }

@@ -7,7 +7,7 @@ struct PomodoroView: View {
     var body: some View {
         AppPage(
             title: "专注训练",
-            subtitle: "把一天切成可完成的专注块，每一轮都在训练注意力和执行力。",
+            subtitle: "选择一个待办进入专注，把注意力留给当前最重要的一步。",
             icon: "timer"
         ) {
             ScrollView {
@@ -54,41 +54,118 @@ struct PomodoroView: View {
                                     }
                                 })
 
-                                Button(action: pomodoroTimer.reset) {
-                                    Label("重置", systemImage: "arrow.counterclockwise")
+                                Button(action: secondaryTimerAction) {
+                                    Label(
+                                        pomodoroTimer.currentSession == nil ? "重置" : "结束",
+                                        systemImage: pomodoroTimer.currentSession == nil ? "arrow.counterclockwise" : "stop.fill"
+                                    )
                                         .font(.headline)
                                         .frame(width: 118, height: 46)
-                                        .background(Color.secondary.opacity(0.18))
-                                        .foregroundColor(.primary)
+                                        .background(
+                                            pomodoroTimer.currentSession == nil
+                                                ? Color.secondary.opacity(0.18)
+                                                : Color.red.opacity(0.14)
+                                        )
+                                        .foregroundColor(pomodoroTimer.currentSession == nil ? .primary : .red)
                                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
 
-                        SectionPanel(title: "本轮设定", subtitle: "开始前只选一件事，降低切换成本。") {
+                        SectionPanel {
                             VStack(alignment: .leading, spacing: 18) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("专注时长")
+                                    Text("计时方式")
                                         .font(.subheadline.weight(.semibold))
-                                    Picker("专注时长", selection: $pomodoroTimer.selectedDuration) {
-                                        ForEach(pomodoroTimer.durations, id: \.self) { duration in
-                                            Text("\(duration)分").tag(duration)
+
+                                    Picker("", selection: $pomodoroTimer.direction) {
+                                        ForEach(FocusTimerDirection.allCases, id: \.self) { direction in
+                                            Text(direction.rawValue).tag(direction)
                                         }
                                     }
+                                    .labelsHidden()
                                     .pickerStyle(.segmented)
                                     .disabled(pomodoroTimer.currentSession != nil)
                                 }
 
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("今天推进什么")
+                                    Text("关联待办")
+                                        .font(.subheadline.weight(.semibold))
+                                    Picker("", selection: selectedTaskBinding) {
+                                        Text("不关联待办").tag(nil as UUID?)
+                                        ForEach(focusableTasks) { task in
+                                            Text(task.title).tag(Optional(task.id))
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .disabled(pomodoroTimer.currentSession != nil)
+                                }
+
+                                if pomodoroTimer.direction == .countDown {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        Text("专注时长")
+                                            .font(.subheadline.weight(.semibold))
+
+                                        LazyVGrid(
+                                            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                                            spacing: 8
+                                        ) {
+                                            ForEach(pomodoroTimer.durations, id: \.self) { duration in
+                                                Button("\(duration) 分") {
+                                                    pomodoroTimer.selectedDuration = duration
+                                                }
+                                                .buttonStyle(.plain)
+                                                .frame(maxWidth: .infinity, minHeight: 34)
+                                                .background(
+                                                    pomodoroTimer.selectedDuration == duration
+                                                        ? Color.accentColor
+                                                        : Color.secondary.opacity(0.12)
+                                                )
+                                                .foregroundColor(
+                                                    pomodoroTimer.selectedDuration == duration
+                                                        ? .white
+                                                        : .primary
+                                                )
+                                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                            }
+                                        }
+
+                                        HStack {
+                                            Text("自定义")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+
+                                            TextField(
+                                                "",
+                                                value: $pomodoroTimer.selectedDuration,
+                                                format: .number
+                                            )
+                                            .labelsHidden()
+                                            .textFieldStyle(.roundedBorder)
+                                            .frame(width: 76)
+
+                                            Text("分钟")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+
+                                            Spacer()
+                                        }
+                                    }
+                                    .disabled(pomodoroTimer.currentSession != nil)
+                                }
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("本轮说明")
                                         .font(.subheadline.weight(.semibold))
                                     TextField("例如：整理课程笔记第 2 节", text: $pomodoroTimer.taskName)
                                         .textFieldStyle(.roundedBorder)
                                         .disabled(pomodoroTimer.currentSession != nil)
                                 }
 
-                                Text(pomodoroTimer.currentSession == nil ? "小步开始，稳定结束。完成的一轮会进入今日统计。" : "这一轮会在后台继续，切换页面不会打断。")
+                                Text(timerHint)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -112,6 +189,7 @@ struct PomodoroView: View {
                             color: .blue
                         )
                     }
+
                 }
             }
         }
@@ -133,6 +211,26 @@ struct PomodoroView: View {
         return "今天已经完成 \(todayCompletedCount) 轮，继续把节奏往前推。"
     }
 
+    private var timerHint: String {
+        if pomodoroTimer.currentSession != nil {
+            return "这一轮会在后台继续，切换页面不会打断。"
+        }
+
+        if pomodoroTimer.direction == .countUp {
+            return "正向计时从 00:00 开始，结束时会按实际时长保存。"
+        }
+
+        return "反向计时结束后会自动保存，也可以提前结束。"
+    }
+
+    private func secondaryTimerAction() {
+        if pomodoroTimer.currentSession == nil {
+            pomodoroTimer.reset()
+        } else {
+            pomodoroTimer.complete()
+        }
+    }
+
     private var todayCompletedCount: Int {
         dataStore.pomodoroSessions.filter {
             Calendar.current.isDateInToday($0.startTime) && $0.isCompleted
@@ -140,8 +238,28 @@ struct PomodoroView: View {
     }
 
     private var todayFocusMinutes: Int {
-        dataStore.pomodoroSessions.filter {
+        let seconds = dataStore.pomodoroSessions.filter {
             Calendar.current.isDateInToday($0.startTime) && $0.isCompleted
-        }.reduce(0) { $0 + $1.duration }
+        }.reduce(0) { $0 + $1.effectiveDurationSeconds }
+        return Int(ceil(Double(seconds) / 60))
+    }
+
+    private var focusableTasks: [TaskItem] {
+        dataStore.tasks.sorted { lhs, rhs in
+            if lhs.isCompleted != rhs.isCompleted {
+                return !lhs.isCompleted
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
+    private var selectedTaskBinding: Binding<UUID?> {
+        Binding(
+            get: { pomodoroTimer.selectedTaskID },
+            set: { taskID in
+                let task = dataStore.tasks.first { $0.id == taskID }
+                pomodoroTimer.selectTask(task)
+            }
+        )
     }
 }

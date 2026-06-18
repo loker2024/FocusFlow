@@ -6,37 +6,29 @@ struct PomodoroSession: Codable, Identifiable {
     var startTime: Date
     var endTime: Date?
     var duration: Int
+    var durationSeconds: Int?
     var taskName: String
+    var taskID: UUID?
     var isCompleted: Bool
 
-    init(startTime: Date = Date(), duration: Int = 25, taskName: String = "") {
+    init(
+        startTime: Date = Date(),
+        duration: Int = 25,
+        durationSeconds: Int? = nil,
+        taskName: String = "",
+        taskID: UUID? = nil
+    ) {
         self.id = UUID()
         self.startTime = startTime
         self.duration = duration
+        self.durationSeconds = durationSeconds
         self.taskName = taskName
+        self.taskID = taskID
         self.isCompleted = false
     }
-}
 
-// MARK: - 时间追踪模型
-struct TimeEntry: Codable, Identifiable {
-    var id: UUID
-    var startTime: Date
-    var endTime: Date?
-    var category: String
-    var project: String
-    var note: String
-
-    init(startTime: Date = Date(), category: String = "", project: String = "", note: String = "") {
-        self.id = UUID()
-        self.startTime = startTime
-        self.category = category
-        self.project = project
-        self.note = note
-    }
-
-    var duration: TimeInterval {
-        endTime?.timeIntervalSince(startTime) ?? Date().timeIntervalSince(startTime)
+    var effectiveDurationSeconds: Int {
+        durationSeconds ?? duration * 60
     }
 }
 
@@ -46,17 +38,24 @@ struct TaskItem: Codable, Identifiable {
     var title: String
     var taskDescription: String
     var priority: Priority
+    var groupID: UUID?
     var isCompleted: Bool
     var createdAt: Date
     var completedAt: Date?
     var dueDate: Date?
     var tags: [String]
 
-    init(title: String, description: String = "", priority: Priority = .medium) {
+    init(
+        title: String,
+        description: String = "",
+        priority: Priority = .medium,
+        groupID: UUID? = nil
+    ) {
         self.id = UUID()
         self.title = title
         self.taskDescription = description
         self.priority = priority
+        self.groupID = groupID
         self.isCompleted = false
         self.createdAt = Date()
         self.tags = []
@@ -67,6 +66,18 @@ struct TaskItem: Codable, Identifiable {
         case medium = "中"
         case high = "高"
         case urgent = "紧急"
+    }
+}
+
+struct TaskGroup: Codable, Identifiable {
+    var id: UUID
+    var name: String
+    var createdAt: Date
+
+    init(name: String) {
+        self.id = UUID()
+        self.name = name
+        self.createdAt = Date()
     }
 }
 
@@ -84,98 +95,6 @@ struct WorkLog: Codable, Identifiable {
         self.content = content
         self.mood = mood
         self.productivity = productivity
-    }
-}
-
-// MARK: - 打卡模型
-struct Habit: Codable, Identifiable {
-    var id: UUID
-    var name: String
-    var icon: String
-    var frequency: Frequency
-    var createdAt: Date
-    var records: [HabitRecord]
-
-    init(name: String, icon: String = "✅", frequency: Frequency = .daily) {
-        self.id = UUID()
-        self.name = name
-        self.icon = icon
-        self.frequency = frequency
-        self.createdAt = Date()
-        self.records = []
-    }
-
-    enum Frequency: String, Codable, CaseIterable {
-        case daily = "每天"
-        case weekly = "每周"
-        case monthly = "每月"
-
-        var streakUnit: String {
-            switch self {
-            case .daily: return "天"
-            case .weekly: return "周"
-            case .monthly: return "月"
-            }
-        }
-    }
-
-    func record(on date: Date, calendar: Calendar = .current) -> HabitRecord? {
-        records.first { record in
-            calendar.isDate(record.date, inSameDayAs: date)
-        }
-    }
-
-    func isCompleted(on date: Date = Date(), calendar: Calendar = .current) -> Bool {
-        switch frequency {
-        case .daily:
-            return record(on: date, calendar: calendar)?.isCompleted == true
-        case .weekly:
-            return records.contains { record in
-                record.isCompleted && calendar.isDate(record.date, equalTo: date, toGranularity: .weekOfYear)
-            }
-        case .monthly:
-            return records.contains { record in
-                record.isCompleted && calendar.isDate(record.date, equalTo: date, toGranularity: .month)
-            }
-        }
-    }
-
-    func currentStreak(endingAt date: Date = Date(), calendar: Calendar = .current) -> Int {
-        var streak = 0
-        var currentDate = calendar.startOfDay(for: date)
-
-        while isCompleted(on: currentDate, calendar: calendar) {
-            streak += 1
-
-            let previous: Date?
-            switch frequency {
-            case .daily:
-                previous = calendar.date(byAdding: .day, value: -1, to: currentDate)
-            case .weekly:
-                previous = calendar.date(byAdding: .weekOfYear, value: -1, to: currentDate)
-            case .monthly:
-                previous = calendar.date(byAdding: .month, value: -1, to: currentDate)
-            }
-
-            guard let previousDate = previous else { break }
-            currentDate = previousDate
-        }
-
-        return streak
-    }
-}
-
-struct HabitRecord: Codable, Identifiable {
-    var id: UUID
-    var date: Date
-    var isCompleted: Bool
-    var note: String
-
-    init(date: Date = Date(), isCompleted: Bool = true, note: String = "") {
-        self.id = UUID()
-        self.date = date
-        self.isCompleted = isCompleted
-        self.note = note
     }
 }
 

@@ -27,6 +27,7 @@ jobs:
           swiftc -parse-as-library \
             FocusFlow/Models/Models.swift \
             FocusFlow/Services/DataStore.swift \
+            FocusFlow/Services/TimerControllers.swift \
             Scripts/check_focusflow.swift \
             -o /tmp/focusflow-checks
 
