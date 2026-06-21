@@ -3,7 +3,10 @@ import SwiftUI
 struct CountdownView: View {
     @EnvironmentObject var dataStore: DataStore
     @State private var showAddEvent = false
+    @State private var selectedEvent: CountdownEvent?
+    @State private var eventPendingDeletion: CountdownEvent?
     @State private var newEventTitle = ""
+    @State private var newEventNote = ""
     @State private var newEventDate = Date().addingTimeInterval(7 * 24 * 3600)
     @State private var newEventIcon = "📅"
     @State private var newEventColor = "blue"
@@ -32,7 +35,7 @@ struct CountdownView: View {
     var body: some View {
         AppPage(
             title: "关键日期",
-            subtitle: "把截止线、纪念日和阶段节点放在眼前，提前安排而不是临时追赶。",
+            subtitle: "记录考试、截止日和纪念日，随时看看还剩多少天。",
             icon: "calendar",
             actionTitle: "添加日期",
             actionIcon: "plus",
@@ -41,25 +44,25 @@ struct CountdownView: View {
             VStack(alignment: .leading, spacing: 18) {
                 MetricStrip {
                     MetricCard(
-                        title: "7 天内",
+                        title: "近 7 天",
                         value: "\(upcomingSoonCount) 个",
-                        caption: "需要提前进入视野",
+                        caption: "最近要留意",
                         icon: "clock.fill",
                         color: .orange
                     )
 
                     MetricCard(
-                        title: "已错过",
+                        title: "已过日期",
                         value: "\(expiredCount) 个",
-                        caption: expiredCount == 0 ? "节奏保持得不错" : "尽快复盘处理",
+                        caption: expiredCount == 0 ? "目前没有" : "可以删除或重新安排",
                         icon: "exclamationmark.circle.fill",
                         color: .red
                     )
 
                     MetricCard(
-                        title: "全部节点",
+                        title: "已记录",
                         value: "\(dataStore.countdownEvents.count) 个",
-                        caption: "人生进度也需要被看见",
+                        caption: "考试、纪念日等",
                         icon: "calendar.badge.clock",
                         color: .blue
                     )
@@ -67,11 +70,15 @@ struct CountdownView: View {
 
                 List {
                     ForEach(sortedEvents) { event in
-                        CountdownEventRow(event: event)
+                        CountdownEventRow(
+                            event: event,
+                            onOpen: { selectedEvent = event },
+                            onDelete: { eventPendingDeletion = event }
+                        )
                     }
                     .onDelete { indexSet in
-                        indexSet.forEach { index in
-                            dataStore.deleteCountdownEvent(sortedEvents[index])
+                        if let index = indexSet.first {
+                            eventPendingDeletion = sortedEvents[index]
                         }
                     }
                 }
@@ -80,8 +87,8 @@ struct CountdownView: View {
                     if dataStore.countdownEvents.isEmpty {
                         EmptyStateView(
                             icon: "calendar.badge.plus",
-                            title: "还没有关键日期",
-                            message: "添加考试、交付、纪念日或阶段节点，让计划提前发生。"
+                            title: "还没有日期",
+                            message: "先添加一个考试、截止日或纪念日。"
                         )
                     }
                 }
@@ -90,6 +97,7 @@ struct CountdownView: View {
         .sheet(isPresented: $showAddEvent) {
             AddCountdownSheet(
                 title: $newEventTitle,
+                note: $newEventNote,
                 date: $newEventDate,
                 icon: $newEventIcon,
                 color: $newEventColor,
@@ -98,6 +106,7 @@ struct CountdownView: View {
                 colors: colors,
                 onSave: {
                     let trimmedTitle = newEventTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedNote = newEventNote.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedTitle.isEmpty else { return }
 
                     let event = CountdownEvent(
@@ -105,7 +114,8 @@ struct CountdownView: View {
                         date: newEventDate,
                         icon: newEventIcon,
                         color: newEventColor,
-                        isRepeatYearly: newEventIsRepeat
+                        isRepeatYearly: newEventIsRepeat,
+                        note: trimmedNote
                     )
                     dataStore.addCountdownEvent(event)
                     resetNewEvent()
@@ -117,10 +127,26 @@ struct CountdownView: View {
                 }
             )
         }
+        .popover(item: $selectedEvent) { event in
+            CountdownEventDetailPopover(event: event)
+                .frame(width: 390)
+        }
+        .alert("删除日期？", isPresented: deleteConfirmationBinding, presenting: eventPendingDeletion) { event in
+            Button("取消", role: .cancel) {
+                eventPendingDeletion = nil
+            }
+            Button("删除", role: .destructive) {
+                dataStore.deleteCountdownEvent(event)
+                eventPendingDeletion = nil
+            }
+        } message: { event in
+            Text("删除“\(event.title)”？删除后无法恢复。")
+        }
     }
 
     private func resetNewEvent() {
         newEventTitle = ""
+        newEventNote = ""
         newEventDate = Date().addingTimeInterval(7 * 24 * 3600)
         newEventIcon = "📅"
         newEventColor = "blue"
@@ -134,10 +160,23 @@ struct CountdownView: View {
     private var expiredCount: Int {
         dataStore.countdownEvents.filter { $0.daysRemaining < 0 }.count
     }
+
+    private var deleteConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { eventPendingDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    eventPendingDeletion = nil
+                }
+            }
+        )
+    }
 }
 
 struct CountdownEventRow: View {
     let event: CountdownEvent
+    let onOpen: () -> Void
+    let onDelete: () -> Void
 
     var eventColor: Color {
         Color.appNamed(event.color)
@@ -150,9 +189,9 @@ struct CountdownEventRow: View {
         } else if days == 1 {
             return "明天"
         } else if days > 0 {
-            return "\(days)天后"
+            return "还有 \(days) 天"
         } else {
-            return "\(-days)天前"
+            return "已过 \(-days) 天"
         }
     }
 
@@ -171,46 +210,172 @@ struct CountdownEventRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(event.icon)
-                .font(.system(size: 40))
-                .frame(width: 58, height: 58)
-                .background(eventColor.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Button(action: onOpen) {
+                HStack(spacing: 14) {
+                    Text(event.icon)
+                        .font(.system(size: 40))
+                        .frame(width: 58, height: 58)
+                        .background(eventColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(event.title)
-                    .font(.headline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(event.title)
+                            .font(.headline)
+                            .foregroundColor(.primary)
 
-                Text(event.nextOccurrenceDate, style: .date)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                        Text(event.nextOccurrenceDate, style: .date)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
 
-                if event.isRepeatYearly {
-                    PillBadge(text: "每年重复", color: .blue)
+                        if let note = event.trimmedNote {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                        }
+
+                        if event.isRepeatYearly {
+                            PillBadge(text: "每年", color: .blue)
+                        }
+                    }
+
+                    Spacer()
+
+                    Text(daysText)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(statusColor)
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("查看日期详情")
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundColor(.red)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help("删除日期")
+        }
+        .padding(.vertical, 8)
+        .contextMenu {
+            Button("删除日期", role: .destructive, action: onDelete)
+        }
+    }
+}
+
+struct CountdownEventDetailPopover: View {
+    let event: CountdownEvent
+
+    private var eventColor: Color {
+        Color.appNamed(event.color)
+    }
+
+    private var daysText: String {
+        let days = event.daysRemaining
+        if days == 0 {
+            return "就是今天"
+        } else if days == 1 {
+            return "还有 1 天"
+        } else if days > 0 {
+            return "还有 \(days) 天"
+        } else {
+            return "已经过去 \(-days) 天"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                Text(event.icon)
+                    .font(.system(size: 36))
+                    .frame(width: 54, height: 54)
+                    .background(eventColor.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(event.title)
+                        .font(.title2.weight(.bold))
+
+                    Text(daysText)
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(eventColor)
+                }
+
+                Spacer()
             }
 
-            Spacer()
+            Divider()
 
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(daysText)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(statusColor)
+            VStack(alignment: .leading, spacing: 12) {
+                detailRow(
+                    title: "日期",
+                    value: event.nextOccurrenceDate.formatted(
+                        .dateTime.year().month(.wide).day().weekday(.wide)
+                    ),
+                    icon: "calendar"
+                )
 
-                if event.daysRemaining > 0 {
-                    Text("提前安排")
-                        .font(.caption)
+                detailRow(
+                    title: "重复",
+                    value: event.isRepeatYearly ? "每年重复" : "不重复",
+                    icon: event.isRepeatYearly ? "repeat" : "calendar.badge.minus"
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("备注")
+                    .font(.headline)
+
+                if let note = event.trimmedNote {
+                    ScrollView {
+                        Text(note)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 180)
+                } else {
+                    Text("没有备注")
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.appSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appStroke)
+            )
         }
-        .padding(.vertical, 8)
+        .padding(22)
+    }
+
+    private func detailRow(title: String, value: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundColor(.secondary)
+                .frame(width: 20)
+
+            Text(title)
+                .foregroundColor(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .fontWeight(.medium)
+        }
+        .font(.callout)
     }
 }
 
 struct AddCountdownSheet: View {
     @Binding var title: String
+    @Binding var note: String
     @Binding var date: Date
     @Binding var icon: String
     @Binding var color: String
@@ -221,30 +386,41 @@ struct AddCountdownSheet: View {
     let onCancel: () -> Void
 
     var body: some View {
-        FormSheet(title: "添加关键日期", width: 450) {
+        FormSheet(title: "添加日期", width: 450) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("日期名称")
+                Text("名称")
                     .font(.headline)
-                TextField("例如：期末复习完成节点", text: $title)
+                TextField("例如：期末考试", text: $title)
                     .textFieldStyle(.roundedBorder)
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("选择日期")
+                Text("备注")
                     .font(.headline)
-                DatePicker("日期", selection: $date, displayedComponents: .date)
-                    .datePickerStyle(.graphical)
+                PromptTextEditor(
+                    text: $note,
+                    prompt: "写下地点、准备事项或其他需要记住的内容（可选）",
+                    minHeight: 82
+                )
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("选择图标")
+                Text("日期")
+                    .font(.headline)
+                DatePicker("", selection: $date, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("图标")
                     .font(.headline)
 
                 IconChoiceGrid(icons: icons, selection: $icon, columns: 5, iconSize: 24)
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("选择颜色")
+                Text("颜色")
                     .font(.headline)
 
                 ColorSwatchPicker(colors: colors, selection: $color)
@@ -254,10 +430,19 @@ struct AddCountdownSheet: View {
                 .font(.headline)
 
             SheetActions(
+                saveTitle: "添加",
                 isSaveDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 onCancel: onCancel,
                 onSave: onSave
             )
         }
+    }
+}
+
+private extension CountdownEvent {
+    var trimmedNote: String? {
+        guard let note else { return nil }
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

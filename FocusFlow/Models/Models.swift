@@ -142,14 +142,23 @@ struct CountdownEvent: Codable, Identifiable {
     var icon: String
     var color: String
     var isRepeatYearly: Bool
+    var note: String?
 
-    init(title: String, date: Date, icon: String = "📅", color: String = "blue", isRepeatYearly: Bool = false) {
+    init(
+        title: String,
+        date: Date,
+        icon: String = "📅",
+        color: String = "blue",
+        isRepeatYearly: Bool = false,
+        note: String = ""
+    ) {
         self.id = UUID()
         self.title = title
         self.date = date
         self.icon = icon
         self.color = color
         self.isRepeatYearly = isRepeatYearly
+        self.note = note.isEmpty ? nil : note
     }
 
     func nextOccurrence(after referenceDate: Date = Date(), calendar: Calendar = .current) -> Date {

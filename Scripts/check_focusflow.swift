@@ -29,6 +29,8 @@ struct FocusFlowChecks {
         try checkYearlyCountdownUsesNextUpcomingOccurrence()
         try checkYearlyCountdownRollsPastDatesIntoNextYear()
         try checkOneOffCountdownCanReportPastEvents()
+        try checkCountdownNotePersistsAndLegacyEventsDecode()
+        try checkDeletingCountdownEventPersists()
         try checkGoalProgressIsClamped()
         try checkCompletingPomodoroSessionStoresAndPersistsSession()
         try checkPomodoroSessionsStayLinkedToTasks()
@@ -84,6 +86,64 @@ struct FocusFlowChecks {
             event.daysRemaining(from: referenceDate, calendar: calendar) == -6,
             "one-off countdown should report past events as negative days"
         )
+    }
+
+    @MainActor
+    private static func checkCountdownNotePersistsAndLegacyEventsDecode() throws {
+        struct LegacyCountdownEvent: Encodable {
+            let id: UUID
+            let title: String
+            let date: Date
+            let icon: String
+            let color: String
+            let isRepeatYearly: Bool
+        }
+
+        let defaults = makeDefaults()
+        let store = DataStore(defaults: defaults)
+        store.addCountdownEvent(
+            CountdownEvent(
+                title: "Exam",
+                date: date(year: 2026, month: 6, day: 30),
+                note: "Bring student card"
+            )
+        )
+
+        let reloadedStore = DataStore(defaults: defaults)
+        try expect(
+            reloadedStore.countdownEvents.first?.note == "Bring student card",
+            "countdown notes should persist"
+        )
+
+        let legacyEvent = LegacyCountdownEvent(
+            id: UUID(),
+            title: "Old event",
+            date: date(year: 2026, month: 7, day: 1),
+            icon: "📅",
+            color: "blue",
+            isRepeatYearly: false
+        )
+        let legacyData = try JSONEncoder().encode(legacyEvent)
+        let decodedLegacyEvent = try JSONDecoder().decode(CountdownEvent.self, from: legacyData)
+        try expect(decodedLegacyEvent.note == nil, "legacy countdown events should decode without notes")
+    }
+
+    @MainActor
+    private static func checkDeletingCountdownEventPersists() throws {
+        let defaults = makeDefaults()
+        let store = DataStore(defaults: defaults)
+        let event = CountdownEvent(
+            title: "Exam",
+            date: date(year: 2026, month: 6, day: 30)
+        )
+
+        store.addCountdownEvent(event)
+        store.deleteCountdownEvent(event)
+
+        try expect(store.countdownEvents.isEmpty, "deleted countdown should leave the current store")
+
+        let reloadedStore = DataStore(defaults: defaults)
+        try expect(reloadedStore.countdownEvents.isEmpty, "deleted countdown should stay deleted after reload")
     }
 
     @MainActor
