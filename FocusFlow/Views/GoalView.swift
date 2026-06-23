@@ -6,6 +6,7 @@ struct GoalView: View {
     @State private var newGoalTitle = ""
     @State private var newGoalDescription = ""
     @State private var newGoalTargetDate = Date().addingTimeInterval(30 * 24 * 3600)
+    @State private var goalPendingDeletion: Goal?
 
     var body: some View {
         AppPage(
@@ -48,8 +49,8 @@ struct GoalView: View {
                         GoalRow(goal: goal)
                     }
                     .onDelete { indexSet in
-                        indexSet.forEach { index in
-                            dataStore.deleteGoal(dataStore.goals[index])
+                        if let index = indexSet.first {
+                            goalPendingDeletion = dataStore.goals[index]
                         }
                     }
                 }
@@ -90,6 +91,17 @@ struct GoalView: View {
                 }
             )
         }
+        .alert("删除长期目标？", isPresented: deleteConfirmationBinding, presenting: goalPendingDeletion) { goal in
+            Button("取消", role: .cancel) {
+                goalPendingDeletion = nil
+            }
+            Button("删除", role: .destructive) {
+                dataStore.deleteGoal(goal)
+                goalPendingDeletion = nil
+            }
+        } message: { goal in
+            Text("“\(goal.title)”和其中的里程碑会一起删除，删除后无法恢复。")
+        }
     }
 
     private func resetNewGoal() {
@@ -114,6 +126,17 @@ struct GoalView: View {
         dataStore.goals.reduce(0) { total, goal in
             total + goal.milestones.filter(\.isCompleted).count
         }
+    }
+
+    private var deleteConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { goalPendingDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    goalPendingDeletion = nil
+                }
+            }
+        )
     }
 }
 

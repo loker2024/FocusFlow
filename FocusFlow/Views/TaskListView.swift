@@ -99,9 +99,9 @@ struct TaskListView: View {
                     .overlay {
                         if filteredTasks.isEmpty {
                             EmptyStateView(
-                                icon: searchText.isEmpty ? "checklist" : "magnifyingglass",
-                                title: searchText.isEmpty ? "这里还没有待办" : "没有匹配结果",
-                                message: searchText.isEmpty ? "新建一个能直接开始的待办，之后可以把专注记录关联到它。" : "换个关键词或筛选条件再试试。"
+                                icon: emptyStateIcon,
+                                title: emptyStateTitle,
+                                message: emptyStateMessage
                             )
                         }
                     }
@@ -307,6 +307,44 @@ struct TaskListView: View {
             $0.isCompleted &&
             $0.completedAt.map(Calendar.current.isDateInToday) == true
         }.count
+    }
+
+    private var emptyStateIcon: String {
+        if !searchText.isEmpty {
+            return "magnifyingglass"
+        }
+
+        return filterStatus == .completed ? "checkmark.circle" : "checklist"
+    }
+
+    private var emptyStateTitle: String {
+        if !searchText.isEmpty {
+            return "没有匹配结果"
+        }
+
+        switch filterStatus {
+        case .all:
+            return selectedGroup == .all ? "这里还没有待办" : "这个分组还没有待办"
+        case .pending:
+            return "当前没有待处理事项"
+        case .completed:
+            return "这里还没有已完成事项"
+        }
+    }
+
+    private var emptyStateMessage: String {
+        if !searchText.isEmpty {
+            return "换个关键词或筛选条件再试试。"
+        }
+
+        switch filterStatus {
+        case .all:
+            return "新建一个能直接开始的待办，之后可以把专注记录关联到它。"
+        case .pending:
+            return "可以切换到“已完成”回看进展，或新建下一步。"
+        case .completed:
+            return "完成待办后，它会出现在这里。"
+        }
     }
 
     private var deleteConfirmationBinding: Binding<Bool> {

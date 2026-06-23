@@ -8,6 +8,7 @@ struct WorkLogView: View {
     @State private var productivity = 3
     @State private var showHistory = false
     @State private var selectedDate = Date()
+    @State private var didSave = false
 
     let moods = ["😊", "😐", "😔", "😤", "😴", "🎉", "💪", "🤔"]
 
@@ -92,15 +93,21 @@ struct WorkLogView: View {
                         Spacer()
 
                         Button(action: saveLog) {
-                            Label("保存复盘", systemImage: "square.and.arrow.down")
+                            Label(
+                                didSave ? "已保存" : "保存复盘",
+                                systemImage: didSave ? "checkmark.circle.fill" : "square.and.arrow.down"
+                            )
                                 .font(.headline)
                                 .frame(width: 148, height: 46)
-                                .background(Color.blue)
+                                .background(didSave ? Color.green : Color.blue)
                                 .foregroundColor(.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
-                        .disabled(logContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(
+                            logContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                            didSave
+                        )
                     }
                 }
             }
@@ -112,6 +119,15 @@ struct WorkLogView: View {
         .onAppear(perform: loadSelectedDateLog)
         .onChange(of: selectedDate) { _, _ in
             loadSelectedDateLog()
+        }
+        .onChange(of: logContent) { _, _ in
+            didSave = false
+        }
+        .onChange(of: selectedMood) { _, _ in
+            didSave = false
+        }
+        .onChange(of: productivity) { _, _ in
+            didSave = false
         }
     }
 
@@ -134,9 +150,7 @@ struct WorkLogView: View {
             productivity: productivity
         )
         dataStore.addWorkLog(log)
-
-        // 显示提示
-        NSSound.beep()
+        didSave = true
     }
 
     private func loadSelectedDateLog() {
@@ -149,6 +163,7 @@ struct WorkLogView: View {
             selectedMood = "😊"
             productivity = 3
         }
+        didSave = false
     }
 }
 
